@@ -1,0 +1,21 @@
+{
+  "menu": null,
+  "table": null,
+  "sfx": {
+    "hover": null,
+    "click": null,
+    "whoosh": null,
+    "flip": null,
+    "gain": null,
+    "bust": null,
+    "stay": null,
+    "freeze": null,
+    "three": null,
+    "toll": null,
+    "chance": null,
+    "flip7": null,
+    "reshuffle": null,
+    "win": null,
+    "lose": null
+  }
+}

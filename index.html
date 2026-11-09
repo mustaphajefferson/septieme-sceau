@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VII — Le Septième Sceau</title>
+<meta name="description" content="Arrache deux cents âmes à la Mort, et elle te rendra la tienne. Jeu de cartes à risque, dark fantasy, ASCII.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='32' y='44' font-family='serif' font-size='30' fill='%23fff' text-anchor='middle'%3EVII%3C/text%3E%3C/svg%3E">
+<link rel="preload" href="fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/unifrakturmaguntia-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="dither" aria-hidden="true"></canvas>
+<canvas id="ascii" aria-hidden="true"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="crt" aria-hidden="true"></div>
+
+<main id="app">
+
+  <!-- ═══════════ ÉCRAN DE DÉMARRAGE ═══════════ -->
+  <section id="boot" class="screen on">
+    <pre id="boot-log"></pre>
+    <button id="boot-enter" class="hidden">[ <span>FRANCHIR LE SEUIL</span> ]</button>
+    <p class="boot-hint">casque recommandé · le son fait partie du jeu</p>
+  </section>
+
+  <!-- ═══════════ MENU PRINCIPAL ═══════════ -->
+  <section id="menu" class="screen">
+    <div class="corner tl">ANNO DOMINI MCCCXLIX<br><span class="dim">LA GRANDE PESTE — AN II</span></div>
+    <div class="corner tr">94 ÂMES<br>1 OSSUAIRE<br>7 SCEAUX</div>
+    <div class="corner bl">MEMENTO MORI<br><span class="dim">v0.1 — prototype</span></div>
+    <div class="corner br"><span class="dim">N 48°51′ · E 2°21′</span><br><button class="link" data-sound-toggle>SON : <b>ACTIF</b></button></div>
+
+    <div class="menu-col">
+      <div id="title-slot" aria-label="VII"></div>
+      <h1 class="sub" data-scramble>LE SEPTIÈME SCEAU</h1>
+      <p class="lore">« Arrache deux cents âmes à la Mort,<br>et elle te rendra la tienne. »</p>
+
+      <label class="namefield"><span>TON NOM ·</span><input id="name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="PÉNITENT"></label>
+
+      <nav id="menu-list">
+        <button data-act="solo"><i>I.</i><span data-scramble>AFFRONTER LA MORT</span><em>contre l'ordinateur</em></button>
+        <button data-act="host"><i>II.</i><span data-scramble>CONVIER DES VIVANTS</span><em>inviter des amis</em></button>
+        <button data-act="join"><i>III.</i><span data-scramble>REJOINDRE UNE TABLE</span><em>entrer un sceau</em></button>
+        <button data-act="random"><i>IV.</i><span data-scramble>ERRER</span><em>partie aléatoire</em></button>
+        <button data-act="rules"><i>V.</i><span data-scramble>LE PACTE</span><em>les règles</em></button>
+        <button data-act="options"><i>VI.</i><span data-scramble>RÉGLAGES</span><em>son, effets</em></button>
+      </nav>
+    </div>
+    <div class="menu-ornament" aria-hidden="true">✱ ✲ ✱</div>
+  </section>
+
+  <!-- ═══════════ SALON ═══════════ -->
+  <section id="lobby" class="screen">
+    <div class="corner tl" id="lobby-kind">TABLE PRIVÉE</div>
+    <div class="corner tr"><button class="link" id="lobby-leave">← QUITTER LA TABLE</button></div>
+    <div class="lobby-wrap">
+      <p class="eyebrow">LE SCEAU DE LA TABLE</p>
+      <div id="lobby-code" class="code">·····</div>
+      <div class="lobby-share">
+        <button class="btn ghost" id="lobby-copy">COPIER LE LIEN D'INVITATION</button>
+      </div>
+      <ol id="lobby-seats"></ol>
+      <p id="lobby-status" class="status">…</p>
+      <button class="btn" id="lobby-start" disabled>OUVRIR L'OSSUAIRE</button>
+    </div>
+  </section>
+
+  <!-- ═══════════ CINÉMATIQUE ═══════════ -->
+  <section id="intro" class="screen">
+    <div id="intro-text"></div>
+    <button class="link skip" id="intro-skip">PASSER ▸▸</button>
+  </section>
+
+  <!-- ═══════════ TABLE DE JEU ═══════════ -->
+  <section id="table" class="screen">
+    <header class="hud">
+      <span id="t-round">MANCHE I</span>
+      <span class="dim">OBJECTIF · <b>200</b> ÂMES</span>
+      <span class="hud-r">
+        <button class="link" data-sound-toggle>SON : <b>ACTIF</b></button>
+        <button class="link" id="t-quit">QUITTER ✕</button>
+      </span>
+    </header>
+
+    <div id="opps"></div>
+
+    <div class="center">
+      <div class="pile" id="deck">
+        <div class="stack"></div>
+        <p><b id="deck-count">94</b><br>L'OSSUAIRE</p>
+      </div>
+      <div id="narr"><p id="narr-line"></p></div>
+      <div class="pile" id="fosse">
+        <div class="stack"></div>
+        <p><b id="fosse-count">0</b><br>LA FOSSE</p>
+      </div>
+    </div>
+
+    <div id="me" class="seat" data-pid="">
+      <div class="me-info">
+        <span class="me-name" id="me-name">TOI</span>
+        <span>TOTAL <b id="me-total">0</b></span>
+        <span>MAIN <b id="me-hand">0</b></span>
+        <span class="risk" id="me-risk">RISQUE <b>0%</b></span>
+        <span class="tag" id="me-tag"></span>
+      </div>
+      <div class="hand" id="my-hand"></div>
+      <div class="actions">
+        <button class="btn" id="b-hit" disabled>ARRACHER UNE ÂME <kbd>A</kbd></button>
+        <button class="btn ghost" id="b-stay" disabled>SE RETIRER <kbd>R</kbd></button>
+      </div>
+    </div>
+
+    <div id="overlay" class="hidden"></div>
+  </section>
+</main>
+
+<!-- ═══════════ FENÊTRES ═══════════ -->
+<div id="modal" class="hidden" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <button class="link modal-x" data-close>✕</button>
+    <div class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="vendor/peerjs.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
