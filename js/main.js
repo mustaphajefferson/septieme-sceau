@@ -2,7 +2,9 @@
 //  VII — LE SEPTIÈME SCEAU · chef d'orchestre
 // ─────────────────────────────────────────────────────────────
 import { THREE, DitherRenderer } from './render.js';
-import { buildCover } from './world.js';
+import { buildTavern } from './world.js';
+import { AsciiView } from './asciiview.js';
+import { installFrameVars, drawScreenFrame } from './frames.js';
 import { portrait, panel } from './gallery.js';
 import { Play } from './play.js';
 import { sound } from './audio.js';
@@ -20,7 +22,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('vii-' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('vii-' + k, JSON.stringify(v)); } catch { /* */ } },
 };
-const settings = { risk: true, intro: 'auto', grain: 2, ...store.get('settings2', {}) };
+const settings = { risk: true, intro: 'auto', grain: 1, opps: 3, ...store.get('settings2', {}) };
+installFrameVars();
 const saveSettings = () => store.set('settings2', settings);
 
 // ── icônes & curseur ─────────────────────────────────────────
@@ -39,9 +42,27 @@ const PIX = [4, 3, 2];
 const dr = new DitherRenderer(canvas, { pixel: (w, h) => (current === 'game' ? Math.max(2, Math.min(w, h) / [190, 250, 330][settings.grain]) : PIX[settings.grain]), palette: 'rouille' });
 const play = new Play(dr);
 
-const coverScene = new THREE.Scene();
-const cover = buildCover(coverScene);
-const coverCam = new THREE.PerspectiveCamera(46, 1, 0.1, 80);
+const tavScene = new THREE.Scene();
+const tavern = buildTavern(tavScene);
+const tavCam = new THREE.PerspectiveCamera(42, 1, 0.1, 90);
+const ascii = new AsciiView($('#asc'), dr.renderer);
+const SHOTS = {
+  title: { pos: [0.4, 1.5, 4.5], look: [0, 4.4, -9], fov: 55 },
+  menu: { pos: [0.9, 1.45, -1.2], look: [0.1, 1.35, -7], fov: 40 },
+};
+let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
+let shotFrom = null, shotTo = null, shotK = 1;
+function goShot(name, dur = 2.2) {
+  const s = SHOTS[name]; if (!s) return;
+  shotFrom = { pos: shot.pos.clone(), look: shot.look.clone(), fov: shot.fov };
+  shotTo = { pos: new THREE.Vector3(...s.pos), look: new THREE.Vector3(...s.look), fov: s.fov, dur };
+  shotK = 0;
+}
+window.__vii = { dr, tavScene, tavCam, THREE };
+const frameSvg = $('#sframe-svg');
+const redrawFrame = () => drawScreenFrame(frameSvg);
+redrawFrame();
+addEventListener('resize', () => { ascii.resize(); redrawFrame(); });
 
 function placeGL() {
   const slot = $(`#${current} [data-gl]`);
@@ -55,7 +76,6 @@ function placeGL() {
   Object.assign(canvas.style, { left: r.left + bl + 'px', top: r.top + bt + 'px', width: w + 'px', height: h + 'px' });
   canvas.style.clipPath = cs.borderRadius && cs.borderRadius !== '0px' ? `inset(0 round ${cs.borderRadius})` : 'none';
   dr.resize(w, h);
-  coverCam.aspect = w / h; coverCam.updateProjectionMatrix();
   play.stage.resize(w, h);
 }
 addEventListener('resize', placeGL);
@@ -65,23 +85,29 @@ let last = performance.now(), ct = 0;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (document.hidden || canvas.style.display === 'none') return;
-  if (current === 'game') play.frame(dt);
-  else if (current === 'title' || current === 'menu') {
-    ct += dt;
-    cover.tick(ct);
-    const a = Math.sin(ct * 0.06) * 0.35;
-    coverCam.position.set(Math.sin(a) * 1.2 + 0.8, 1.35 + Math.sin(ct * 0.2) * 0.05, 1.6 + Math.cos(a) * 0.2);
-    coverCam.lookAt(-0.3, 2.0, -12);
-    dr.render(coverScene, coverCam);
+  if (document.hidden) return;
+  if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
+  if (current === 'intro') return;
+  ct += dt;
+  tavern.tick(ct);
+  if (shotTo) {
+    shotK = Math.min(1, shotK + dt / shotTo.dur);
+    const k = shotK < 0.5 ? 2 * shotK * shotK : 1 - Math.pow(-2 * shotK + 2, 2) / 2;
+    shot.pos.lerpVectors(shotFrom.pos, shotTo.pos, k); shot.look.lerpVectors(shotFrom.look, shotTo.look, k); shot.fov = shotFrom.fov + (shotTo.fov - shotFrom.fov) * k;
+    if (shotK >= 1) shotTo = null;
   }
+  tavCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15, Math.sin(ct * 0.21) * 0.05, 0));
+  tavCam.fov = shot.fov; tavCam.lookAt(shot.look);
+  ascii.render(tavScene, tavCam, dt, { dim: current === 'codex' || current === 'tavern' ? 0.45 : 1 });
 }
 
 function show(id) {
   current = id;
   document.body.classList.toggle('ingame', id === 'game');
+  if (id === 'title' || id === 'menu') goShot(id);
+  tavern.showPilgrim(id !== 'title');
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
-  dr.setPalette(id === 'game' ? 'fange' : id === 'menu' ? 'rouille' : 'rouille');
+  dr.setPalette('fange');
   requestAnimationFrame(placeGL);
   setTimeout(placeGL, 520);
 }
@@ -113,7 +139,7 @@ let helm = store.get('helm', 0);
 const myName = () => ($('#name').value.trim() || 'Pèlerin').slice(0, 14);
 function renderMe() {
   $('#helm-name').textContent = HELMS[helm];
-  $('#me-portrait').src = portrait(dr, 'pelerin', { variant: helm, palette: 'fange', w: 96, h: 112 });
+  tavern.setPilgrim(helm);
 }
 $$('[data-helm]').forEach((b) => b.addEventListener('click', () => { helm = (helm + +b.dataset.helm + 4) % 4; store.set('helm', helm); sound.play('click'); renderMe(); }));
 $('#name').addEventListener('input', (e) => store.set('name', e.target.value));
@@ -123,7 +149,7 @@ async function boot() {
   show('title');
   requestAnimationFrame(loop);
   await document.fonts.ready;
-  await Promise.all(['27px Bastarda', '60px Jacquard', '700 30px Grenze'].map((f) => document.fonts.load(f).catch(() => {})));
+  await Promise.all(['27px Bastarda', '60px Jacquard', '700 30px Grenze', '500 20px Grenze', '11px JBM'].map((f) => document.fonts.load(f).catch(() => {})));
   placeGL();
   const b = $('#enter');
   b.disabled = false; b.textContent = 'Appuie sur une touche';
@@ -147,10 +173,11 @@ async function enter() {
 $('#menu-list').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   sound.play('click');
-  ({ solo: soloModal, host: () => hostFlow(), join: () => joinFlow(), random: randomFlow, codex: openCodex, options: optionsModal })[b.dataset.act]?.();
+  ({ host: () => hostFlow(), join: () => joinFlow(), random: randomFlow, codex: openCodex, options: optionsModal })[b.dataset.act]?.();
 });
 
 const SOLO = ['fossoyeur', 'terreau', 'clous', 'cierge'];
+$('#go').addEventListener('click', () => { sound.play('click'); startSolo(SOLO.slice(0, settings.opps)); });
 function soloModal() {
   let n = store.get('opps', 1);
   modal(`<h2>La table t'attend</h2><p class="sub">Combien de créatures s'assoient avec toi ?</p>
@@ -170,6 +197,7 @@ function optionsModal() {
   modal(`<h2>Réglages</h2><p class="sub">Son, tramage, cinématique.</p>
     <label class="slider"><span>Musique</span><input type="range" min="0" max="1" step="0.05" value="${v.music}" data-v="music"><b>${Math.round(v.music * 100)}</b></label>
     <label class="slider"><span>Effets</span><input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-v="sfx"><b>${Math.round(v.sfx * 100)}</b></label>
+    <button class="toggle" data-t="opps"><span>Créatures à ta table</span><b>${settings.opps}</b></button>
     <button class="toggle" data-t="grain"><span>Grain du tramage</span><b>${G[settings.grain]}</b></button>
     <button class="toggle" data-t="risk"><span>Afficher le présage (risque)</span><b>${settings.risk ? 'Oui' : 'Non'}</b></button>
     <button class="toggle" data-t="intro"><span>Cinématique d'ouverture</span><b>${I[settings.intro]}</b></button>`, (b) => {
@@ -178,6 +206,7 @@ function optionsModal() {
       const t = e.target.closest('[data-t]'); if (!t) return;
       sound.play('click');
       const k = t.dataset.t;
+      if (k === 'opps') { settings.opps = settings.opps % 4 + 1; t.lastElementChild.textContent = settings.opps; }
       if (k === 'grain') { settings.grain = (settings.grain + 1) % 3; t.lastElementChild.textContent = G[settings.grain]; placeGL(); }
       if (k === 'risk') { settings.risk = !settings.risk; t.lastElementChild.textContent = settings.risk ? 'Oui' : 'Non'; play.showRisk = settings.risk; }
       if (k === 'intro') { settings.intro = { auto: 'full', full: 'short', short: 'auto' }[settings.intro]; t.lastElementChild.textContent = I[settings.intro]; }

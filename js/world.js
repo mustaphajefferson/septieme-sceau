@@ -260,13 +260,7 @@ export const CREATURES = {
       root.add(at(box(0.09, 0.03, 0.1, M.metal), s * 0.24, 0.85, -0.55));
     }
     const head = at(new THREE.Group(), 0, 1.5, 0); root.add(head);
-    const helmKinds = [
-      () => { head.add(at(sph(0.14, M.metal, 10, 8), 0, 0, 0)); head.add(at(box(0.2, 0.02, 0.05, M.black), 0, 0.01, -0.12)); head.add(at(cone(0.02, 0.22, M.metalDark, 5), 0, 0.22, 0)); },
-      () => { head.add(at(cyl(0.14, 0.13, 0.26, M.metal, 10), 0, 0, 0)); head.add(at(box(0.04, 0.12, 0.05, M.black), 0, 0, -0.12)); for (const s of [-1, 1]) { const h = cone(0.03, 0.2, M.bone, 5); h.rotation.z = -s * 0.8; at(h, s * 0.17, 0.14, 0); head.add(h); } },
-      () => { head.add(at(sph(0.14, M.metal, 10, 8), 0, 0, 0)); head.add(rx(at(new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 5, 16), M.flameCore), 0, 0.26, 0), Math.PI / 2)); head.add(at(box(0.18, 0.02, 0.05, M.black), 0, 0, -0.12)); },
-      () => { head.add(at(cone(0.16, 0.36, M.metal, 10), 0, 0.05, 0)); head.add(at(box(0.15, 0.03, 0.05, M.black), 0, -0.04, -0.12)); },
-    ];
-    helmKinds[variant % helmKinds.length]();
+    head.add(makeHelm(variant));
     return seated(root, head);
   },
 };
@@ -294,11 +288,19 @@ export function buildCrypt(scene) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), M.stone); floor.rotation.x = -Math.PI / 2; at(floor, 0, 0, -1.2); room.add(floor);
   // piliers et arcs
   for (let k = 0; k < 10; k++) {
+    if (k === 0) continue;
     const a = (k / 10) * Math.PI * 2;
     const p = at(box(0.5, 4.5, 0.5, M.stone), Math.sin(a) * 4.6, 2.25, -1.2 - Math.cos(a) * 4.6); p.rotation.y = a; room.add(p);
-    const arch = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.14, 4, 12, Math.PI), M.stone);
-    at(arch, Math.sin(a + 0.314) * 4.75, 3.0, -1.2 - Math.cos(a + 0.314) * 4.75); arch.rotation.y = a + 0.314 + Math.PI / 2 - Math.PI / 2; arch.lookAt(V3(0, 3, -1.2)); room.add(arch);
+    const arch = ogive(2.2, 2.4, 0.35, 0.28, M.stone);
+    const ax = Math.sin(a + 0.314) * 4.75, az = -1.2 - Math.cos(a + 0.314) * 4.75;
+    at(arch, ax, 0, az); arch.lookAt(V3(0, 0, -1.2)); room.add(arch);
+    const niche = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.4), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    at(niche, ax * 1.01, 1.7, -1.2 + (az + 1.2) * 1.01); niche.lookAt(V3(0, 1.7, -1.2)); room.add(niche);
   }
+  // rosace derrière le Fossoyeur
+  const rose = makeRose(1.05); at(rose, 0, 2.15, -6.0); room.add(rose);
+  const roseArch = ogive(2.6, 1.1, 0.4, 0.3, M.stone); at(roseArch, 0, 0, -6.1); room.add(roseArch);
+  const roseL = new THREE.SpotLight(0xd8e8c8, 25, 9, 0.5, 0.7, 1); at(roseL, 0, 2.2, -5.8); roseL.target.position.set(0, 0.8, -1.4); room.add(roseL, roseL.target);
   // table ronde
   const top = at(cyl(TABLE.r, TABLE.r, 0.07, M.wood, 28), TABLE.c.x, TABLE.c.y - 0.035, TABLE.c.z); room.add(top);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(TABLE.r, 0.035, 5, 32), M.metalDark); rim.rotation.x = Math.PI / 2; at(rim, TABLE.c.x, TABLE.c.y - 0.03, TABLE.c.z); room.add(rim);
@@ -403,4 +405,159 @@ export function buildCorridor(scene) {
   scene.add(new THREE.HemisphereLight(0x8aa070, 0x101010, 2.2));
   const end = new THREE.PointLight(0xd8e8c0, 30, 14, 1); end.position.set(0, 2.2, -12); scene.add(end);
   return { tick(t) { torch.userData.flicker(t); torch2.userData.flicker(t); } };
+}
+
+// ── Heaumes des pèlerins ─────────────────────────────────────
+export function makeHelm(variant = 0) {
+  mats();
+  const head = new THREE.Group();
+  [
+    () => { head.add(at(sph(0.14, M.metal, 10, 8), 0, 0, 0)); head.add(at(box(0.2, 0.02, 0.05, M.black), 0, 0.01, -0.12)); head.add(at(cone(0.02, 0.22, M.metalDark, 5), 0, 0.22, 0)); },
+    () => { head.add(at(cyl(0.14, 0.13, 0.26, M.metal, 10), 0, 0, 0)); head.add(at(box(0.04, 0.12, 0.05, M.black), 0, 0, -0.12)); for (const s of [-1, 1]) { const h = cone(0.03, 0.2, M.bone, 5); h.rotation.z = -s * 0.8; at(h, s * 0.17, 0.14, 0); head.add(h); } },
+    () => { head.add(at(sph(0.14, M.metal, 10, 8), 0, 0, 0)); head.add(rx(at(new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 5, 16), M.flameCore), 0, 0.26, 0), Math.PI / 2)); head.add(at(box(0.18, 0.02, 0.05, M.black), 0, 0, -0.12)); },
+    () => { head.add(at(cone(0.16, 0.36, M.metal, 10), 0, 0.05, 0)); head.add(at(box(0.15, 0.03, 0.05, M.black), 0, -0.04, -0.12)); },
+  ][variant % 4]();
+  return head;
+}
+
+// Pèlerin debout (écran du seuil)
+export function makeStandingPilgrim(variant = 0) {
+  mats();
+  const root = new THREE.Group();
+  const cloakM = new THREE.MeshStandardMaterial({ color: 0x9a9888, flatShading: true, roughness: 1, side: THREE.DoubleSide });
+  for (const s of [-1, 1]) root.add(at(cyl(0.07, 0.06, 0.9, M.metalDark, 6), s * 0.11, 0.45, 0));
+  const torso = lathe([[0.2, 0], [0.26, 0.3], [0.3, 0.55], [0.27, 0.65], [0.1, 0.72], [0, 0.73]], M.metal, 10); at(torso, 0, 0.88, 0); root.add(torso);
+  const cloak = lathe([[0.5, 0], [0.42, 0.5], [0.34, 0.9], [0.3, 1.25], [0.12, 1.32]], cloakM, 12); at(cloak, 0, 0.12, 0.04); root.add(cloak);
+  for (const s of [-1, 1]) { const p = at(sph(0.13, M.metal, 8, 6), s * 0.27, 1.5, 0); p.scale.set(1, 0.7, 1.1); root.add(p); }
+  const head = at(makeHelm(variant), 0, 1.72, 0); root.add(head);
+  const sword = at(new THREE.Group(), 0.3, 0.75, -0.1); sword.rotation.z = 0.12; root.add(sword);
+  sword.add(at(box(0.04, 0.8, 0.01, M.metal), 0, -0.2, 0)); sword.add(at(box(0.22, 0.03, 0.03, M.bronze), 0, 0.2, 0)); sword.add(at(box(0.03, 0.14, 0.03, M.clothDark), 0, 0.29, 0));
+  root.userData.tick = (t) => { cloak.rotation.y = Math.sin(t * 0.8) * 0.05; cloak.scale.x = 1 + Math.sin(t * 1.3) * 0.02; head.rotation.y = Math.sin(t * 0.25) * 0.25; };
+  return root;
+}
+
+// ── Ogive (arc brisé) ────────────────────────────────────────
+export function ogive(w, h0, depth, thick, m) {
+  const outline = (W, H) => {
+    const pts = [new THREE.Vector2(-W / 2, 0), new THREE.Vector2(-W / 2, H)];
+    for (let i = 1; i <= 10; i++) { const a = Math.PI - (i / 10) * (Math.PI / 3); pts.push(new THREE.Vector2(W / 2 + W * Math.cos(a), H + W * Math.sin(a))); }
+    for (let i = 9; i >= 0; i--) { const a = (i / 10) * (Math.PI / 3); pts.push(new THREE.Vector2(-W / 2 + W * Math.cos(a), H + W * Math.sin(a))); }
+    pts.push(new THREE.Vector2(W / 2, 0));
+    return pts;
+  };
+  const shape = new THREE.Shape(outline(w + thick * 2, h0));
+  const hole = new THREE.Path(outline(w, h0).map((p) => new THREE.Vector2(p.x, p.y)).reverse());
+  shape.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  return new THREE.Mesh(g, m);
+}
+
+// ── Rosace ───────────────────────────────────────────────────
+export function makeRose(r = 1.2) {
+  mats();
+  const g = new THREE.Group();
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ color: 0xc8d8a8 }));
+  g.add(glass);
+  const stone = new THREE.MeshStandardMaterial({ color: 0x2a2a24, roughness: 1, flatShading: true });
+  g.add(at(new THREE.Mesh(new THREE.TorusGeometry(r, 0.09, 6, 36), stone), 0, 0, 0.02));
+  g.add(at(new THREE.Mesh(new THREE.TorusGeometry(r * 0.32, 0.05, 6, 24), stone), 0, 0, 0.02));
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    const b = at(box(0.04, r * 0.68, 0.06, stone), Math.cos(a) * r * 0.66, Math.sin(a) * r * 0.66, 0.02); b.rotation.z = a - Math.PI / 2; g.add(b);
+    const ring = at(new THREE.Mesh(new THREE.TorusGeometry(r * 0.17, 0.03, 4, 16), stone), Math.cos(a + 0.26) * r * 0.78, Math.sin(a + 0.26) * r * 0.78, 0.02); g.add(ring);
+  }
+  return g;
+}
+
+// ── Extérieur de la taverne (écrans d'accueil) ──────────────
+export function buildTavern(scene) {
+  mats();
+  scene.background = new THREE.Color(0x020202);
+  scene.fog = new THREE.Fog(0x020202, 10, 42);
+  const g = new THREE.Group(); scene.add(g);
+  const wall = new THREE.MeshStandardMaterial({ color: 0xc8c0b0, roughness: 1, flatShading: true });
+  const beam = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 });
+  const roof = new THREE.MeshStandardMaterial({ color: 0x3a3a36, roughness: 1, flatShading: true });
+  const win = new THREE.MeshBasicMaterial({ color: 0xffb050 });
+  const winDim = new THREE.MeshBasicMaterial({ color: 0xc87a30 });
+  const T = at(new THREE.Group(), 0, 0, -9); g.add(T);
+  // rez-de-chaussée en pierre, étage en colombages en encorbellement
+  T.add(at(box(7, 3, 4.4, M.stone), 0, 1.5, 0));
+  T.add(at(box(7.6, 2.6, 4.8, wall), 0, 4.3, 0.15));
+  for (let x = -3.6; x <= 3.7; x += 1.2) T.add(at(box(0.16, 2.6, 0.12, beam), x, 4.3, 2.58));
+  T.add(at(box(7.7, 0.18, 0.14, beam), 0, 3.05, 2.6)); T.add(at(box(7.7, 0.18, 0.14, beam), 0, 5.55, 2.6));
+  for (let k = 0; k < 6; k++) { const d = at(box(0.12, 1.6, 0.1, beam), -3 + k * 1.2 + 0.6, 4.3, 2.6); d.rotation.z = k % 2 ? 0.6 : -0.6; T.add(d); }
+  // toit pentu
+  const rf = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 4.4, 4.2, 4, 1), roof); rf.rotation.y = Math.PI / 4; rf.scale.set(1.25, 1, 0.85); at(rf, 0, 7.6, 0.15); T.add(rf);
+  T.add(at(box(0.7, 3, 0.7, M.stone), 2.2, 8.2, -0.6));
+  // fenêtres allumées
+  const windows = [];
+  const mkWin = (x, y, w, h, m) => {
+    const p = at(new THREE.Mesh(new THREE.PlaneGeometry(w, h), m), x, y, 2.62 + (y > 3 ? 0.0 : -0.38)); p.userData.m = m; T.add(p); windows.push(p);
+    T.add(at(box(0.06, h, 0.06, beam), x, y, p.position.z + 0.02)); T.add(at(box(w, 0.06, 0.06, beam), x, y, p.position.z + 0.02));
+    const l = new THREE.PointLight(0xffe8d0, 3, 6, 1.2); at(l, x, y - 1.2, p.position.z + 1.6); T.add(l);
+  };
+  mkWin(-2.4, 1.6, 1.1, 1.0, win); mkWin(2.5, 1.6, 1.1, 1.0, win);
+  mkWin(-2.4, 4.3, 0.9, 1.1, winDim); mkWin(0, 4.3, 0.9, 1.1, win); mkWin(2.4, 4.3, 0.9, 1.1, winDim);
+  // porte en ogive, fente de lumière
+  const door = at(ogive(1.2, 1.4, 0.3, 0.18, M.stone), 0, 0, 2.15); T.add(door);
+  const leaf = at(new THREE.Group(), -0.6, 0, 2.5); T.add(leaf);
+  leaf.add(at(box(1.2, 2.0, 0.08, M.wood), 0.6, 1.0, 0)); leaf.rotation.y = 1.25;
+  const inside = new THREE.MeshBasicMaterial({ color: 0xfff0d8 });
+  T.add(at(new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.05), inside), 0, 1.02, 2.23));
+  T.add(at(new THREE.Mesh(new THREE.CircleGeometry(0.6, 16, 0, Math.PI), inside), 0, 2.04, 2.23));
+  const doorL = new THREE.SpotLight(0xfff0dc, 30, 12, 0.7, 0.6, 1); at(doorL, 0, 1.6, 2.0); doorL.target.position.set(0, 0, 8); T.add(doorL, doorL.target);
+  const lantern = at(makeFlame(5), 0.95, 2.35, 2.55); T.add(lantern);
+  T.add(at(box(0.2, 0.3, 0.2, M.metalDark), 0.95, 2.4, 2.55));
+  // enseigne
+  T.add(at(box(1.2, 0.08, 0.08, M.metalDark), -1.3, 2.9, 2.9));
+  const sign = at(new THREE.Group(), -1.7, 2.85, 2.9); T.add(sign);
+  sign.add(at(box(0.8, 0.6, 0.06, M.wood), 0, -0.4, 0));
+  sign.add(at(makeSkull(2.2), 0, -0.38, 0.05));
+  // maisons voisines, flèche d'église, arbre mort, lune
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3a3a34, roughness: 1, flatShading: true });
+  [[-9, 0, -13, 5, 6], [9.5, 0, -12, 5, 5], [-15, 0, -20, 6, 8], [15, 0, -19, 6, 7]].forEach(([x, y, z, w, h]) => {
+    g.add(at(box(w, h, 4, dark), x, h / 2, z));
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.01, w * 0.75, 3, 4, 1), dark); r.rotation.y = Math.PI / 4; at(r, x, h + 1.5, z); g.add(r);
+    if (x > 0) g.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.8), winDim), x - 1, h * 0.6, z + 2.01));
+  });
+  const church = at(new THREE.Group(), -6, 0, -30); g.add(church);
+  church.add(at(box(3, 12, 3, dark), 0, 6, 0)); church.add(at(cone(2.2, 9, dark, 4), 0, 16.5, 0));
+  for (const s of [-1, 1]) church.add(at(cone(0.4, 3, dark, 4), s * 1.5, 13.5, 1.5));
+  const tree = at(new THREE.Group(), 6.5, 0, -4); g.add(tree);
+  tree.add(tube([[0, 0, 0], [0.3, 2, 0], [-0.2, 4, 0.2], [0.4, 6, 0]], 0.18, beam));
+  tree.add(tube([[0.1, 3, 0], [1.2, 4, 0.2], [2, 4.4, 0.5]], 0.07, beam)); tree.add(tube([[-0.1, 4.3, 0.2], [-1.3, 5.2, 0], [-1.8, 6, 0.2]], 0.06, beam));
+  const moon = at(new THREE.Mesh(new THREE.CircleGeometry(2.2, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })), 9, 17, -34); g.add(moon);
+  // ciel : clair près de l'horizon, noir en haut (silhouettes lisibles)
+  const skyTex = (() => { const c = document.createElement('canvas'); c.width = 4; c.height = 256; const x = c.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#000'); gr.addColorStop(0.45, '#2a2a2a'); gr.addColorStop(0.8, '#8a8880'); gr.addColorStop(1, '#b8b4a8');
+    x.fillStyle = gr; x.fillRect(0, 0, 4, 256); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const sky = at(new THREE.Mesh(new THREE.PlaneGeometry(160, 60), new THREE.MeshBasicMaterial({ map: skyTex, fog: false })), 0, 24, -40); g.add(sky);
+  // pavés + flaques
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), M.stone); ground.rotation.x = -Math.PI / 2; g.add(ground);
+  const pud = new THREE.MeshBasicMaterial({ color: 0x9a9a92 });
+  [[-1.5, -4], [1.8, -5.5], [0.3, -2.5], [-3, -6.5]].forEach(([x, z], i) => { const p = new THREE.Mesh(new THREE.CircleGeometry(0.5 + i * 0.15, 12), pud); p.rotation.x = -Math.PI / 2; p.scale.x = 1.8; at(p, x, 0.01, z); g.add(p); });
+  // fumée de cheminée
+  const smoke = [];
+  for (let k = 0; k < 10; k++) { const m = at(sph(0.45 + k * 0.08, new THREE.MeshBasicMaterial({ color: 0x5a5a54, transparent: true, opacity: 0.5 }), 8, 6), 2.2, 9.8 + k * 0.8, -9.6); smoke.push(m); g.add(m); }
+  scene.add(new THREE.HemisphereLight(0x9aa0b0, 0x1a1a1a, 1.6));
+  const moonL = new THREE.DirectionalLight(0xd8dcf0, 1.6); moonL.position.set(6, 12, 8); scene.add(moonL);
+  const back = new THREE.DirectionalLight(0xc8ccd8, 1.2); back.position.set(-4, 6, -20); scene.add(back);
+  // pèlerin debout (visible sur l'écran du seuil)
+  let pilgrim = null, variant = -1;
+  const setPilgrim = (v) => {
+    if (v === variant) return; variant = v;
+    if (pilgrim) g.remove(pilgrim);
+    pilgrim = makeStandingPilgrim(v); at(pilgrim, 0.1, 0, -5.5); pilgrim.rotation.y = 0.3; g.add(pilgrim);
+  };
+  return {
+    setPilgrim, showPilgrim(v) { if (pilgrim) pilgrim.visible = v; },
+    tick(t) {
+      lantern.userData.flicker(t);
+      sign.rotation.x = Math.sin(t * 1.4) * 0.12;
+      windows.forEach((w, i) => { w.material = Math.sin(t * 0.7 + i * 2.1) > 0.97 ? winDim : w.userData.m; });
+      smoke.forEach((m, i) => { m.position.y = 9.8 + ((i * 0.8 + t * 0.35) % 8); m.position.x = 2.2 + Math.sin(t * 0.3 + i) * 0.4 + (m.position.y - 9.8) * 0.25; });
+      pilgrim?.userData.tick(t);
+    },
+  };
 }

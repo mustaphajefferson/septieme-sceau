@@ -120,7 +120,7 @@ export class Stage {
   layout(snap, { instant = false, skip = null } = {}) {
     const keep = new Set();
     for (const p of snap.players) {
-      if (!this.seats.has(p.id)) continue;
+      if (!this.seats.has(p.id) || this.seats.get(p.id).me) continue;
       const rows = [p.nums, [...p.mods, ...(p.chance ? [p.chance] : []), ...p.used]];
       rows.forEach((row, r) => row.forEach((c, i) => {
         keep.add(c.id);
@@ -205,6 +205,48 @@ export class Stage {
     const front = camQ.clone();
     const back = camQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.PI));
     return { pos, front, back };
+  }
+
+  // ── projections écran ───────────────────────────────────
+  project(v) {
+    const p = v.clone().project(this.camera);
+    const r = this.dr.canvas.getBoundingClientRect();
+    return { x: r.left + (p.x * 0.5 + 0.5) * r.width, y: r.top + (-p.y * 0.5 + 0.5) * r.height };
+  }
+  unproject(nx, ny, dist) {
+    const v = V3(nx, ny, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
+    return this.camera.position.clone().add(v.multiplyScalar(dist));
+  }
+  deckScreen() { return this.project(this.deckTop()); }
+  fosseScreen() { return this.project(this.fossePos.clone().add(V3(0, 0.05, 0))); }
+  seatScreen(pid) { return this.project(this.seatPoint(pid)); }
+
+  holdPoseR() {
+    const pos = this.unproject(0.36, -0.62, 0.42);
+    return { pos, rot: new THREE.Euler(1.35, -0.25, -0.35, 'YXZ'), curl: 0.7 };
+  }
+  holdPoseL() {
+    const pos = this.unproject(-0.5, -0.82, 0.42);
+    return { pos, rot: new THREE.Euler(1.3, 0.35, 0.5, 'YXZ'), curl: 0.7 };
+  }
+  // la main droite va arracher une âme ; renvoie la position écran de la pioche
+  async meReach() {
+    this.handBusy = true;
+    const R = this.R, top = this.deckTop();
+    const wristAt = (pt, lift) => { const dir = pt.clone().sub(this.poseR.pos); dir.y = 0; dir.normalize(); return pt.clone().sub(dir.multiplyScalar(0.17)).add(V3(0, lift, 0)); };
+    const over = wristAt(top, 0.1);
+    await this.moveHand(R, { pos: over, rot: this.handAim(over, top, -0.35), curl: 0.05 }, 280);
+    const grab = wristAt(top, 0.035);
+    await this.moveHand(R, { pos: grab, rot: this.handAim(grab, top, -0.2), curl: 0.5 }, 160);
+    const xy = this.deckScreen();
+    this.setDeckCount(this.deckCount - 1);
+    this.holdR = true;
+    this.moveHand(R, this.holdPoseR(), 520);
+    return xy;
+  }
+  setHolding(r, l) {
+    if (r !== undefined && r !== this.holdR) { this.holdR = r; this.handBusy = r; this.moveHand(this.R, r ? this.holdPoseR() : this.poseR, 420); }
+    if (l !== undefined && l !== this.holdL) { this.holdL = l; this.moveHand(this.L, l ? this.holdPoseL() : this.poseL, 420); }
   }
 
   // Le pèlerin arrache une âme : la main droite va la chercher et la montre
@@ -386,11 +428,11 @@ export class Stage {
     const look = this.focus ? (this.focus === this.you ? this.camBase.clone() : this.seatPoint(this.focus)) : this.camBase.clone();
     for (const s of this.seats.values()) if (s.creature) s.creature.update(t, s.pid === this.focus ? this.camBase.clone() : look, s.mood || 0);
     // respiration des mains
-    if (!this.handBusy) {
+    if (!this.handBusy && !this.holdR) {
       this.R.position.y = this.poseR.pos.y + Math.sin(t * 1.3) * 0.002;
       if (this.tapping) this.R.userData.setCurl(0.3 + Math.max(0, Math.sin(t * 9)) * 0.25 * (Math.sin(t * 1.7) > 0 ? 1 : 0));
     }
-    this.L.position.y = this.poseL.pos.y + Math.sin(t * 1.2 + 1) * 0.002;
+    if (!this.holdL) this.L.position.y = this.poseL.pos.y + Math.sin(t * 1.2 + 1) * 0.002;
     // caméra : regard qui suit la souris + secousse
     const yaw = -this.mouse.x * 0.16, pitch = this.mouse.y * 0.08;
     const lk = this.lookBase.clone().add(V3(Math.sin(yaw) * 1.4, pitch * 1.4 + Math.sin(t * 0.5) * 0.008, 0));

@@ -9,6 +9,7 @@ import { icon } from './icons.js';
 import { portrait } from './gallery.js';
 import { BESTIAIRE } from './lore.js';
 import { wait } from './fx.js';
+import { HandView } from './handview.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const STATUS_ICON = { stayed: 'fist', frozen: 'frost', bust: 'skull' };
@@ -20,6 +21,8 @@ export class Play {
   constructor(dr) {
     this.dr = dr;
     this.stage = new Stage(dr);
+    this.hand = new HandView($('#hand'));
+    addEventListener('resize', () => this.hand.relayout());
     this.root = $('#game');
     this.canvas = dr.canvas;
     this.pending = null; this.pendingTarget = null; this._continue = null;
@@ -49,6 +52,8 @@ export class Play {
     this.players = snap.players.map((p) => ({ ...p }));
     this.names = Object.fromEntries(snap.players.map((p) => [p.id, p.name]));
     this.stage.setPlayers(snap.players, you);
+    this.hand.clear({ x: innerWidth / 2, y: innerHeight }); $('#hand').innerHTML = '';
+    this.stage.holdR = false; this.stage.holdL = false;
     this.stage.layout(snap, { instant: true });
     this.stage.setDeckCount(snap.deckCount);
     this.buildParty(snap);
@@ -186,7 +191,8 @@ export class Play {
 
       case 'roundStart': {
         this.closeOverlay();
-        await this.sweep();
+        st.setHolding(false, false);
+        await Promise.all([this.sweep(), this.hand.clear(st.fosseScreen())]);
         st.layout(snap, { instant: true });
         st.setDeckCount(snap.deckCount);
         this.sync(snap);
@@ -205,19 +211,28 @@ export class Play {
       case 'reveal':
         st.focus = ev.pid;
         this.sync(snap);
-        if (this.is(ev.pid)) { sound.play('whoosh'); await st.meDraw(ev.card); sound.play('flip'); await st.wait(380); }
+        if (this.is(ev.pid)) {
+          await this.hand.stash();
+          if (this.hand.fan.length) st.setHolding(undefined, true);
+          sound.play('whoosh');
+          const xy = await st.meReach();
+          const d = this.hand.draw(ev.card, xy);
+          setTimeout(() => sound.play('flip'), 520 / st.speed);
+          await d; await st.wait(250);
+        }
         else { sound.play('whoosh'); await st.oppDraw(ev.pid, ev.card); sound.play('flip'); await st.wait(420); }
         this.log(`${esc(this.who(ev.pid))} · <em>${esc(nice(cardTitle(ev.card)))}</em>`);
         break;
 
       case 'gain':
-        await st.settleCard(ev.card, ev.pid, snap);
+        if (!this.is(ev.pid)) await st.settleCard(ev.card, ev.pid, snap);
         st.layout(snap); this.sync(snap);
         sound.play('gain');
         break;
 
       case 'bust': {
-        await st.settleCard(ev.card, ev.pid, snap);
+        if (this.is(ev.pid)) { this.hand.mark(ev.card.id, 'dup'); this.hand.setState('bust'); }
+        else await st.settleCard(ev.card, ev.pid, snap);
         st.layout(snap); this.sync(snap);
         sound.play('bust');
         st.shake(0.04); st.flashDither('invert', 140); st.burst(ev.pid, 'ember', 110);
@@ -232,7 +247,8 @@ export class Play {
       }
 
       case 'saved':
-        await st.settleCard(ev.card, 'fosse', snap);
+        if (this.is(ev.pid)) await Promise.all([this.hand.send(ev.card.id, st.fosseScreen()), this.hand.send(ev.chance.id, st.fosseScreen())]);
+        else await st.settleCard(ev.card, 'fosse', snap);
         st.layout(snap); this.sync(snap);
         sound.play('chance'); st.pulse(ev.pid, 1);
         this.log(`${esc(this.who(ev.pid))} · <b>Sursis</b>`);
@@ -252,14 +268,16 @@ export class Play {
         sound.play('stay');
         const p = snap.players.find((q) => q.id === ev.pid);
         this.log(`${esc(this.who(ev.pid))} · se retire (${p.hand})`);
-        if (this.is(ev.pid)) await this.tapTable();
+        if (this.is(ev.pid)) { await this.hand.stash(); st.setHolding(false, true); }
         else { const l = this.creatureSay(ev.pid, 'stay'); if (l && Math.random() < 0.5) this.say(l[0], [l[1]], 1800); }
         await st.wait(500);
         break;
       }
 
       case 'freeze':
-        await st.settleCard(ev.card, 'fosse', snap);
+        if (this.is(ev.from)) { await this.hand.send(ev.card.id, this.is(ev.to) ? st.fosseScreen() : st.seatScreen(ev.to)); st.setHolding(false, undefined); }
+        else await st.settleCard(ev.card, 'fosse', snap);
+        if (this.is(ev.to)) this.hand.setState('frozen');
         st.layout(snap); this.sync(snap);
         sound.play('freeze'); st.burst(ev.to, 'frost', 90);
         this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Givre</b>`);
@@ -267,7 +285,8 @@ export class Play {
         break;
 
       case 'three':
-        await st.settleCard(ev.card, 'fosse', snap);
+        if (this.is(ev.from)) { await this.hand.send(ev.card.id, this.is(ev.to) ? st.fosseScreen() : st.seatScreen(ev.to)); st.setHolding(false, undefined); }
+        else await st.settleCard(ev.card, 'fosse', snap);
         this.sync(snap);
         sound.play('three'); st.pulse(ev.to, 3);
         this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Trois Glas</b>`);
@@ -281,14 +300,18 @@ export class Play {
 
       case 'setAside':
       case 'give':
-        await st.settleCard(ev.card, ev.type === 'give' ? ev.to : ev.pid, snap);
+        if (ev.type === 'setAside' && this.is(ev.pid)) await this.hand.stash();
+        else if (ev.type === 'give' && this.is(ev.from)) await this.hand.send(ev.card.id, st.seatScreen(ev.to));
+        else if (ev.type === 'give' && this.is(ev.to)) await this.hand.addToFan(ev.card, st.seatScreen(ev.from));
+        if (!(ev.type === 'setAside' ? this.is(ev.pid) : this.is(ev.to))) await st.settleCard(ev.card, ev.type === 'give' ? ev.to : ev.pid, snap);
         st.layout(snap); this.sync(snap);
         if (ev.type === 'give') { sound.play('chance'); this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Sursis</b>`); }
         await st.wait(300);
         break;
 
       case 'discard':
-        await st.settleCard(ev.card, 'fosse', snap);
+        if (this.is(ev.pid)) await this.hand.send(ev.card.id, st.fosseScreen());
+        else await st.settleCard(ev.card, 'fosse', snap);
         this.sync(snap);
         break;
 
@@ -353,6 +376,7 @@ export class Play {
     this.hit.disabled = true; this.stay.disabled = true;
     $('#bar').classList.remove('ready');
     this.stage.tapping = false;
+    if (v === 'hit') this.hand.stash();
     const r = this.pending; this.pending = null; r(v);
   }
 
