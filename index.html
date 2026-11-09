@@ -4,128 +4,153 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VII — Le Septième Sceau</title>
-<meta name="description" content="Arrache deux cents âmes à la Mort, et elle te rendra la tienne. Jeu de cartes à risque, dark fantasy, ASCII.">
-<meta name="theme-color" content="#000000">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23000'/%3E%3Ctext x='32' y='44' font-family='serif' font-size='30' fill='%23fff' text-anchor='middle'%3EVII%3C/text%3E%3C/svg%3E">
-<link rel="preload" href="fonts/jetbrains-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/unifrakturmaguntia-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<meta name="description" content="Guide officiel du pèlerin. Arrache deux cents âmes au Fossoyeur. Jeu de cartes dark fantasy à l'ancienne.">
+<meta name="theme-color" content="#060805">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23060805'/%3E%3Cpath d='M3 3h2v10H3zM7 3h2v10H7zM11 3h2v10h-2z' fill='%2398c653'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/jacquarda-bastarda-9-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/jacquard-24-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<canvas id="dither" aria-hidden="true"></canvas>
-<canvas id="ascii" aria-hidden="true"></canvas>
-<canvas id="fx" aria-hidden="true"></canvas>
-<div id="crt" aria-hidden="true"></div>
+<canvas id="gl" aria-hidden="true"></canvas>
+<div id="grain" aria-hidden="true"></div>
 
 <main id="app">
 
-  <!-- ═══════════ ÉCRAN DE DÉMARRAGE ═══════════ -->
-  <section id="boot" class="screen on">
-    <pre id="boot-log"></pre>
-    <button id="boot-enter" class="hidden">[ <span>FRANCHIR LE SEUIL</span> ]</button>
-    <p class="boot-hint">casque recommandé · le son fait partie du jeu</p>
+  <!-- ═══ COUVERTURE ═══ -->
+  <section id="title" class="screen on">
+    <div class="cover">
+      <div class="cover-logo">
+        <span class="vol">Vol.<b>I</b></span>
+        <h1 class="logo">VII</h1>
+        <p class="logo-sub">Le Septième Sceau</p>
+      </div>
+      <div class="cover-win" data-gl></div>
+      <div class="cover-foot">
+        <p class="tag">~ Guide officiel du pèlerin ~</p>
+        <button id="enter" class="press" disabled>Les âmes s'éveillent…</button>
+      </div>
+      <span class="cover-mark mk-l">A·D·1349</span>
+      <span class="cover-mark mk-r">Vaulmorte</span>
+    </div>
   </section>
 
-  <!-- ═══════════ MENU PRINCIPAL ═══════════ -->
+  <!-- ═══ MENU : DOUBLE PAGE DU GUIDE ═══ -->
   <section id="menu" class="screen">
-    <div class="corner tl">ANNO DOMINI MCCCXLIX<br><span class="dim">LA GRANDE PESTE — AN II</span></div>
-    <div class="corner tr">94 ÂMES<br>1 OSSUAIRE<br>7 SCEAUX</div>
-    <div class="corner bl">MEMENTO MORI<br><span class="dim">v0.1 — prototype</span></div>
-    <div class="corner br"><span class="dim">N 48°51′ · E 2°21′</span><br><button class="link" data-sound-toggle>SON : <b>ACTIF</b></button></div>
-
-    <div class="menu-col">
-      <div id="title-slot" aria-label="VII"></div>
-      <h1 class="sub" data-scramble>LE SEPTIÈME SCEAU</h1>
-      <p class="lore">« Arrache deux cents âmes à la Mort,<br>et elle te rendra la tienne. »</p>
-
-      <label class="namefield"><span>TON NOM ·</span><input id="name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="PÉNITENT"></label>
-
-      <nav id="menu-list">
-        <button data-act="solo"><i>I.</i><span data-scramble>AFFRONTER LA MORT</span><em>contre l'ordinateur</em></button>
-        <button data-act="host"><i>II.</i><span data-scramble>CONVIER DES VIVANTS</span><em>inviter des amis</em></button>
-        <button data-act="join"><i>III.</i><span data-scramble>REJOINDRE UNE TABLE</span><em>entrer un sceau</em></button>
-        <button data-act="random"><i>IV.</i><span data-scramble>ERRER</span><em>partie aléatoire</em></button>
-        <button data-act="rules"><i>V.</i><span data-scramble>LE PACTE</span><em>les règles</em></button>
-        <button data-act="options"><i>VI.</i><span data-scramble>RÉGLAGES</span><em>son, effets</em></button>
-      </nav>
+    <div class="spread">
+      <article class="page fange">
+        <header class="page-h"><span>Le Septième Sceau</span><span class="ix">i</span></header>
+        <div class="win arch" data-gl></div>
+        <h1 class="logo">VII</h1>
+        <p class="q">« Arrache deux cents âmes au Fossoyeur, et il te rouvrira la dalle. »</p>
+        <footer class="page-f"><span class="orn" data-icon="skull"></span><span>Les âmes de la Fange</span><span class="orn" data-icon="skull"></span></footer>
+      </article>
+      <article class="page velin">
+        <header class="page-h"><span>Le Pèlerin</span><span class="ix">ii</span></header>
+        <div class="char">
+          <div class="char-portrait frame"><img id="me-portrait" alt=""></div>
+          <div class="char-info">
+            <label class="field"><span>Nom</span><input id="name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Pèlerin"></label>
+            <div class="helm-pick"><button data-helm="-1" aria-label="Heaume précédent">◂</button><span id="helm-name">Heaume-Lune</span><button data-helm="1" aria-label="Heaume suivant">▸</button></div>
+            <p class="flavor">Mort dans la Fange. L'armure a suivi, la chair non.</p>
+          </div>
+        </div>
+        <h2 class="h-goth">Que veux-tu faire ?</h2>
+        <nav id="menu-list" class="entries">
+          <button data-act="solo"><span class="ic" data-icon="skull"></span><span class="t">Affronter le Fossoyeur</span><em>seul, contre les créatures</em><i>I</i></button>
+          <button data-act="host"><span class="ic" data-icon="candle"></span><span class="t">Convier des vivants</span><em>inviter des amis</em><i>II</i></button>
+          <button data-act="join"><span class="ic" data-icon="seal"></span><span class="t">Briser un sceau</span><em>rejoindre une table</em><i>III</i></button>
+          <button data-act="random"><span class="ic" data-icon="door"></span><span class="t">Errer</span><em>table au hasard</em><i>IV</i></button>
+          <button data-act="codex"><span class="ic" data-icon="scroll"></span><span class="t">Pacte &amp; Bestiaire</span><em>règles et créatures</em><i>V</i></button>
+          <button data-act="options"><span class="ic" data-icon="gear"></span><span class="t">Réglages</span><em>son, affichage</em><i>VI</i></button>
+        </nav>
+        <footer class="page-f"><span>— ii —</span><button class="link" data-sound-toggle><span data-icon="note"></span></button></footer>
+      </article>
     </div>
-    <div class="menu-ornament" aria-hidden="true">✱ ✲ ✱</div>
   </section>
 
-  <!-- ═══════════ SALON ═══════════ -->
-  <section id="lobby" class="screen">
-    <div class="corner tl" id="lobby-kind">TABLE PRIVÉE</div>
-    <div class="corner tr"><button class="link" id="lobby-leave">← QUITTER LA TABLE</button></div>
-    <div class="lobby-wrap">
-      <p class="eyebrow">LE SCEAU DE LA TABLE</p>
-      <div id="lobby-code" class="code">·····</div>
-      <div class="lobby-share">
-        <button class="btn ghost" id="lobby-copy">COPIER LE LIEN D'INVITATION</button>
+  <!-- ═══ PACTE & BESTIAIRE ═══ -->
+  <section id="codex" class="screen">
+    <div class="spread scroll">
+      <article class="page velin">
+        <header class="page-h"><span>Le Pacte</span><span class="ix">iii</span></header>
+        <div class="banner-h"><span data-icon="skull"></span><h2>Les états de l'âme</h2><span data-icon="skull"></span></div>
+        <p class="lead">Prends garde aux choses qui peuvent arriver à la table. Certaines blessures sont plus graves que d'autres.</p>
+        <div id="pacte" class="states"></div>
+        <div class="note-box">Deux cents âmes rachètent la chair. On compte à la fin de chaque manche ; le plus haut total l'emporte.</div>
+      </article>
+      <article class="page fange">
+        <header class="page-h"><span>Bestiaire</span><span class="ix">iv</span></header>
+        <div class="banner-h"><span data-icon="skull"></span><h2>Ceux de la table</h2><span data-icon="skull"></span></div>
+        <div id="bestiaire" class="beasts"></div>
+      </article>
+    </div>
+    <button class="back link" data-back>◂ Refermer le guide</button>
+  </section>
+
+  <!-- ═══ TAVERNE (SALON) ═══ -->
+  <section id="tavern" class="screen">
+    <article class="page velin solo-page">
+      <header class="page-h"><span id="tav-kind">Table privée</span><span class="ix">v</span></header>
+      <div class="banner-h"><span data-icon="candle"></span><h2>La Taverne des Noyés</h2><span data-icon="candle"></span></div>
+      <div class="sceau frame">
+        <small>Sceau de la table</small>
+        <b id="tav-code">·····</b>
+        <button id="tav-copy" class="btn ghost">Copier le lien d'invitation</button>
       </div>
-      <ol id="lobby-seats"></ol>
-      <p id="lobby-status" class="status">…</p>
-      <button class="btn" id="lobby-start" disabled>OUVRIR L'OSSUAIRE</button>
-    </div>
+      <ol id="tav-seats" class="seats"></ol>
+      <p id="tav-status" class="status">…</p>
+      <div class="btns">
+        <button id="tav-ai" class="btn ghost">+ Asseoir une créature</button>
+        <button id="tav-start" class="btn" disabled>Ouvrir l'Ossuaire</button>
+      </div>
+      <div class="chatbox frame"><ol id="tav-log"></ol><input id="tav-in" maxlength="120" placeholder="Parler à la table…" autocomplete="off"></div>
+      <footer class="page-f"><button class="link" id="tav-leave">◂ Quitter la taverne</button></footer>
+    </article>
   </section>
 
-  <!-- ═══════════ CINÉMATIQUE ═══════════ -->
+  <!-- ═══ CINÉMATIQUE EN CASES ═══ -->
   <section id="intro" class="screen">
-    <div id="intro-text"></div>
-    <button class="link skip" id="intro-skip">PASSER ▸▸</button>
+    <div class="planche">
+      <div class="pl-img frame"><img id="intro-img" alt=""></div>
+      <div class="pl-say" id="intro-say"></div>
+    </div>
+    <p class="pl-hint">clic : suite</p>
+    <button id="intro-skip" class="link">Passer ▸▸</button>
   </section>
 
-  <!-- ═══════════ TABLE DE JEU ═══════════ -->
-  <section id="table" class="screen">
-    <header class="hud">
-      <span id="t-round">MANCHE I</span>
-      <span class="dim">OBJECTIF · <b>200</b> ÂMES</span>
-      <span class="hud-r">
-        <button class="link" data-sound-toggle>SON : <b>ACTIF</b></button>
-        <button class="link" id="t-quit">QUITTER ✕</button>
-      </span>
-    </header>
-
-    <div id="opps"></div>
-
-    <div class="center">
-      <div class="pile" id="deck">
-        <div class="stack"></div>
-        <p><b id="deck-count">94</b><br>L'OSSUAIRE</p>
-      </div>
-      <div id="narr"><p id="narr-line"></p></div>
-      <div class="pile" id="fosse">
-        <div class="stack"></div>
-        <p><b id="fosse-count">0</b><br>LA FOSSE</p>
-      </div>
+  <!-- ═══ LA TABLE ═══ -->
+  <section id="game" class="screen">
+    <div class="full" data-gl></div>
+    <div id="plates"></div>
+    <div id="party"></div>
+    <div id="hud-tr" class="hud-frame">
+      <div class="round"><small>Manche</small><b id="g-round">I</b></div>
+      <div class="deckc" title="Âmes dans l'Ossuaire"><span data-icon="skull"></span><b id="g-deck">94</b></div>
+      <button class="hud-btn" data-sound-toggle title="Son"><span data-icon="note"></span></button>
+      <button class="hud-btn" id="g-chat" title="Journal"><span data-icon="chat"></span></button>
+      <button class="hud-btn" id="g-quit" title="Fuir la table"><span data-icon="door"></span></button>
     </div>
-
-    <div id="me" class="seat" data-pid="">
-      <div class="me-info">
-        <span class="me-name" id="me-name">TOI</span>
-        <span>TOTAL <b id="me-total">0</b></span>
-        <span>MAIN <b id="me-hand">0</b></span>
-        <span class="risk" id="me-risk">RISQUE <b>0%</b></span>
-        <span class="tag" id="me-tag"></span>
+    <div id="banner"></div>
+    <div id="log" class="hud-frame"><ol></ol><input id="chat-in" maxlength="120" placeholder="Entrée : parler" autocomplete="off"></div>
+    <div id="say"></div>
+    <div id="bar">
+      <div class="bar-top">
+        <span class="handv"><small>Main</small><b id="g-hand">0</b></span>
+        <span class="omen" title="Présage"><span data-icon="eye"></span><i><u id="g-risk"></u></i></span>
+        <span class="buffs" id="g-buffs"></span>
       </div>
-      <div class="hand" id="my-hand"></div>
-      <div class="actions">
-        <button class="btn" id="b-hit" disabled>ARRACHER UNE ÂME <kbd>A</kbd></button>
-        <button class="btn ghost" id="b-stay" disabled>SE RETIRER <kbd>R</kbd></button>
+      <div class="slots">
+        <button id="b-hit" class="slot" disabled title="Arracher une âme (1)"><span data-icon="grab"></span><kbd>1</kbd><em>Arracher</em></button>
+        <button id="b-stay" class="slot" disabled title="Se retirer (2)"><span data-icon="fist"></span><kbd>2</kbd><em>Se retirer</em></button>
       </div>
+      <div class="xp"><i id="g-xp"></i><i id="g-xp2"></i><span><b id="g-total">0</b> / 200</span></div>
     </div>
-
-    <div id="overlay" class="hidden"></div>
+    <div id="g-overlay" class="hidden"></div>
   </section>
 </main>
 
-<!-- ═══════════ FENÊTRES ═══════════ -->
-<div id="modal" class="hidden" role="dialog" aria-modal="true">
-  <div class="modal-box">
-    <button class="link modal-x" data-close>✕</button>
-    <div class="modal-body"></div>
-  </div>
-</div>
-
+<div id="modal" class="hidden" role="dialog" aria-modal="true"><div class="sheet velin frame"><button class="link modal-x" data-close>✕</button><div class="modal-body"></div></div></div>
 <div id="toast" class="hidden"></div>
 
 <script src="vendor/peerjs.min.js"></script>

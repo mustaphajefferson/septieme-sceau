@@ -2,17 +2,17 @@
 import { bustRisk, TARGET, uniqueCount } from './game.js';
 
 export const PERSONAS = {
-  mort:       { name: 'LA MORT',       risk: 0.30, think: [900, 1700], epithet: 'Celle qui tient l\'Ossuaire' },
-  flagellant: { name: 'LE FLAGELLANT', risk: 0.42, think: [500, 1100], epithet: 'Il aime la douleur' },
-  veuve:      { name: 'LA VEUVE',      risk: 0.20, think: [1100, 2000], epithet: 'Elle a déjà tout perdu' },
-  lepreux:    { name: 'LE LÉPREUX',    risk: 0.33, think: [700, 2200], epithet: 'Ses doigts tombent un à un' },
+  fossoyeur: { name: 'LE FOSSOYEUR',       risk: 0.30, think: [900, 1700] },
+  terreau:   { name: 'LE CHEVALIER-TERREAU', risk: 0.42, think: [600, 1200] },
+  clous:     { name: 'LA MÈRE-AUX-CLOUS',  risk: 0.20, think: [1100, 2000] },
+  cierge:    { name: 'L\'ENFANT-CIERGE',   risk: 0.33, think: [700, 2200] },
 };
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const between = ([a, b]) => a + Math.random() * (b - a);
 
-export function makeAI(persona = 'mort', { fast = false } = {}) {
-  const P = PERSONAS[persona] || PERSONAS.mort;
+export function makeAI(persona = 'fossoyeur', { fast = false } = {}) {
+  const P = PERSONAS[persona] || PERSONAS.fossoyeur;
   return {
     async decide(state, pid) {
       await wait(fast ? 0 : between(P.think));
@@ -25,7 +25,7 @@ export function makeAI(persona = 'mort', { fast = false } = {}) {
       if (best >= TARGET * 0.8 && me.score < best) threshold += 0.12; // désespoir
       if (uniqueCount(me) === 6) threshold += 0.08;                    // les Sept Sceaux tentent
       if (me.hand < 12) threshold += 0.1;                               // main trop maigre
-      if (persona === 'lepreux') threshold += (Math.random() - 0.5) * 0.25;
+      if (persona === 'cierge') threshold += (Math.random() - 0.5) * 0.25;
       return risk > threshold ? 'stay' : 'hit';
     },
 

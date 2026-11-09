@@ -30,9 +30,9 @@ function makePeer(id) {
 
 // ── Hôte ─────────────────────────────────────────────────────
 export class Host {
-  constructor({ code, name, isPublic = false }) {
+  constructor({ code, name, helm = 0, isPublic = false }) {
     this.code = code; this.isPublic = isPublic;
-    this.seats = [{ id: 'h', name, kind: 'human', you: true }];
+    this.seats = [{ id: 'h', name, kind: 'human', helm, you: true }];
     this.conns = new Map();
     this.pending = new Map();
     this.started = false;
@@ -58,10 +58,12 @@ export class Host {
       if (m?.t === 'hello') {
         if (this.started || this.seats.length >= MAX_SEATS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
         pid = 'p' + (++this.rid) + Math.random().toString(36).slice(2, 5);
-        this.seats.push({ id: pid, name: String(m.name || 'ÂME ERRANTE').slice(0, 14).toUpperCase(), kind: 'remote' });
+        this.seats.push({ id: pid, name: String(m.name || 'Âme errante').slice(0, 14), kind: 'remote', helm: (m.helm | 0) % 4 });
         this.conns.set(pid, conn);
         conn.send({ t: 'welcome', you: pid, code: this.code });
         this.lobby();
+      } else if (m?.t === 'chat' && pid) {
+        this.onChat?.(pid, String(m.text || '').slice(0, 120));
       } else if (m?.t === 'reply') {
         const p = this.pending.get(m.rid);
         if (p && p.pid === pid) { this.pending.delete(m.rid); clearTimeout(p.timer); p.res(m.value); }
@@ -80,7 +82,7 @@ export class Host {
   }
 
   lobby() {
-    const players = this.seats.map(({ id, name }) => ({ id, name }));
+    const players = this.seats.map(({ id, name, kind, persona, helm }) => ({ id, name, kind, persona, helm }));
     this.broadcast({ t: 'lobby', players, isPublic: this.isPublic });
     this.onLobby?.(players);
   }
@@ -106,7 +108,7 @@ export class Host {
 
 // ── Invité ───────────────────────────────────────────────────
 export class Client {
-  constructor({ name }) { this.name = name; this.handlers = {}; }
+  constructor({ name, helm = 0 }) { this.name = name; this.helm = helm; this.handlers = {}; }
   on(t, fn) { this.handlers[t] = fn; return this; }
 
   join(code) {
@@ -117,7 +119,7 @@ export class Client {
       this.peer.on('error', fail);
       this.peer.on('open', () => {
         const conn = (this.conn = this.peer.connect(PREFIX + code, { reliable: true, serialization: 'json' }));
-        conn.on('open', () => conn.send({ t: 'hello', name: this.name }));
+        conn.on('open', () => conn.send({ t: 'hello', name: this.name, helm: this.helm }));
         conn.on('data', (m) => {
           if (!m) return;
           if (m.t === 'full') return fail({ type: 'full' });
@@ -130,24 +132,25 @@ export class Client {
     });
   }
 
+  chat(text) { try { this.conn?.send({ t: 'chat', text }); } catch { /* */ } }
   reply(rid, value) { try { this.conn?.send({ t: 'reply', rid, value }); } catch { /* */ } }
   close() { try { this.conn?.close(); this.peer?.destroy(); } catch { /* */ } }
 }
 
 // ── Errance : trouver une table publique, ou en ouvrir une ──
-export async function wander(name, onStatus) {
+export async function wander(name, helm, onStatus) {
   for (let slot = 0; slot < 6; slot++) {
     const code = 'ERR' + 'ACDEF'[slot] + 'X';
     onStatus?.(`Tu erres vers la table ${slot + 1}…`);
     try {
-      const c = await new Client({ name }).join(code);
+      const c = await new Client({ name, helm }).join(code);
       return { role: 'client', client: c, code };
     } catch (e) {
       if (e?.type === 'full') continue;
       if (e?.type === 'network' || e?.type === 'browser-incompatible' || e?.type === 'server-error') throw e;
       // personne : on ouvre cette table nous-mêmes
       try {
-        const h = await new Host({ code, name, isPublic: true }).open();
+        const h = await new Host({ code, name, helm, isPublic: true }).open();
         return { role: 'host', host: h, code };
       } catch (e2) {
         if (e2?.type === 'unavailable-id') continue; // quelqu'un vient de la prendre
