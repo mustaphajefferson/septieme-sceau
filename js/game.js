@@ -101,17 +101,18 @@ export class Match {
    * @param {Record<string,{decide:Function,chooseTarget:Function}>} o.controllers
    * @param {(ev:object, snap:object)=>Promise<void>} o.presenter
    */
-  constructor({ players, controllers, presenter, rng = Math.random }) {
+  constructor({ players, controllers, presenter, rng = Math.random, target = TARGET, dealer = 0 }) {
+    this.target = target;
     this.rng = rng;
     this.players = players.map((p) => ({
-      ...p, score: 0, nums: [], mods: [], chance: null, used: [], status: 'active', flip7: false, last: 0,
+      score: 0, ...p, nums: [], mods: [], chance: null, used: [], status: 'active', flip7: false, last: 0,
     }));
     this.controllers = controllers;
     this.presenter = presenter;
     this.deck = shuffle(buildDeck(), rng);
     this.discard = [];
     this.round = 0;
-    this.dealer = Math.floor(rng() * this.players.length);
+    this.dealer = dealer % this.players.length;
     this.turn = null;
     this.flip7Hit = false;
     this.aborted = false;
@@ -126,7 +127,7 @@ export class Match {
       deckCount: this.deck.length,
       discard: this.discard.slice(),
       discardTop: this.discard[this.discard.length - 1] || null,
-      target: TARGET,
+      target: this.target,
       winner: this.winner,
       players: this.players.map((p) => ({
         id: p.id, name: p.name, kind: p.kind, persona: p.persona, score: p.score,
@@ -155,7 +156,7 @@ export class Match {
     while (!this.winner) {
       await this.playRound();
       const top = Math.max(...this.players.map((p) => p.score));
-      if (top >= TARGET) {
+      if (top >= this.target) {
         const leaders = this.players.filter((p) => p.score === top);
         if (leaders.length === 1) this.winner = leaders[0].id;
       }

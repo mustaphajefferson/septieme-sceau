@@ -11,8 +11,8 @@ export const PERSONAS = {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const between = ([a, b]) => a + Math.random() * (b - a);
 
-export function makeAI(persona = 'fossoyeur', { fast = false } = {}) {
-  const P = PERSONAS[persona] || PERSONAS.fossoyeur;
+export function makeAI(persona = 'fossoyeur', { fast = false, risk = null } = {}) {
+  const P = risk != null ? { risk, think: [700, 1500] } : (PERSONAS[persona] || PERSONAS.fossoyeur);
   return {
     async decide(state, pid) {
       await wait(fast ? 0 : between(P.think));
@@ -20,9 +20,10 @@ export function makeAI(persona = 'fossoyeur', { fast = false } = {}) {
       const risk = bustRisk(state, pid) * (me.chance ? 0.15 : 1);
       const best = Math.max(...state.players.filter((p) => p.id !== pid).map((p) => p.score));
       // Si encaisser suffit pour gagner (et passer devant) : on encaisse
-      if (me.score + me.hand >= TARGET && me.score + me.hand > best) return 'stay';
+      const T = state.target || TARGET;
+      if (me.score + me.hand >= T && me.score + me.hand > best) return 'stay';
       let threshold = P.risk;
-      if (best >= TARGET * 0.8 && me.score < best) threshold += 0.12; // désespoir
+      if (best >= T * 0.8 && me.score < best) threshold += 0.12; // désespoir
       if (uniqueCount(me) === 6) threshold += 0.08;                    // les Sept Sceaux tentent
       if (me.hand < 12) threshold += 0.1;                               // main trop maigre
       if (persona === 'cierge') threshold += (Math.random() - 0.5) * 0.25;

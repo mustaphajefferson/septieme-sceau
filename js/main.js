@@ -1,520 +1,410 @@
 // ─────────────────────────────────────────────────────────────
-//  VII — LE SEPTIÈME SCEAU · chef d'orchestre
+//  VII — LE SEPTIÈME SCEAU
+//  Titre → le Chevalier → la Route → le Duel → le butin (ou la mort)
 // ─────────────────────────────────────────────────────────────
-import { THREE, DitherRenderer } from './render.js';
-import { buildTavern } from './world.js';
-import { AsciiView } from './asciiview.js';
-import { installFrameVars, drawScreenFrame } from './frames.js';
-import { portrait, panel } from './gallery.js';
-import { Play } from './play.js';
-import { sound } from './audio.js';
+import { Dither, ditherCanvas } from './dither.js';
+import { canvas, grad, radial, glow, vignette, goth, TAU, rng, fbm, clamp } from './paint.js';
+import { drawFigure, POSE_ORDER, etendard, trophees, skullFace } from './figure.js';
+import { ZONE_DRAW, vitrail, mist, rain, ash, fireflies, dust, frameSimple, frameHonneurs } from './places.js';
+import { ZONES, FOES, ITEMS, PALIERS, knightKit } from './content.js';
+import { setUnlockedRanks, face, back } from './cards.js';
 import { Match } from './game.js';
-import { makeAI, PERSONAS } from './ai.js';
-import { Host, Client, newCode, cleanCode, wander, errText, MAX_SEATS } from './net.js';
+import { makeAI } from './ai.js';
+import { Duel } from './duel.js';
+import { sound } from './audio.js';
 import { icon } from './icons.js';
-import { BESTIAIRE, PACTE, HELMS, INTRO, INTRO_SHORT } from './lore.js';
-import { typeInto, wait } from './fx.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const store = {
-  get(k, d) { try { const v = localStorage.getItem('vii-' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('vii-' + k, JSON.stringify(v)); } catch { /* */ } },
-};
-const settings = { risk: true, intro: 'auto', grain: 1, opps: 3, ...store.get('settings2', {}) };
-installFrameVars();
-const saveSettings = () => store.set('settings2', settings);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ── icônes & curseur ─────────────────────────────────────────
-const fillIcons = (root = document) => $$('[data-icon]', root).forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
-fillIcons();
-{
-  const svg = icon('grab').replace('class="px "', 'xmlns="http://www.w3.org/2000/svg" width="32" height="32"').replace(/currentColor/g, '#e9e3bf');
-  const outline = svg.replace('<path', '<path transform="translate(1 1)" fill="#000" ').replace(/fill="#e9e3bf" opacity=".45"/, 'fill="#000"');
-  document.body.style.cursor = `url("data:image/svg+xml,${encodeURIComponent(outline)}") 8 2, auto`;
+// ── sauvegarde ───────────────────────────────────────────────
+const KEY = 'vii-save-2';
+const fresh = () => ({ unlocked: [], ranks: [], node: 0, score: 0, pose: 0 });
+let save = (() => { try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fresh(); } })();
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { /* */ } };
+{ // raccourcis de test : ?reset  ·  ?jusqua=N (débloque les N premiers combats)
+  const q = new URLSearchParams(location.search);
+  if (q.has('reset')) { save = fresh(); persist(); }
+  if (q.has('jusqua')) {
+    save = fresh();
+    const n = Math.min(12, +q.get('jusqua') || 0);
+    for (let i = 0; i < n; i++) { const f = FOES[i]; save.unlocked.push(f.reward); if (f.ambiance) save.unlocked.push(f.ambiance); if (f.extra) save.unlocked.push(f.extra); save.ranks.push(i + 1); }
+    save.node = n; save.pose = n % 3; persist();
+  }
 }
+setUnlockedRanks(save.ranks);
+const has = (k) => save.unlocked.includes(k);
+const done = () => save.node >= 12;
+const zoneOf = (n) => ZONES[Math.min(2, Math.floor(Math.min(n, 11) / 4))];
 
 // ── rendu ────────────────────────────────────────────────────
 let current = 'title';
-const canvas = $('#gl');
-const PIX = [4, 3, 2];
-const dr = new DitherRenderer(canvas, { pixel: (w, h) => (current === 'game' ? Math.max(2, Math.min(w, h) / [190, 250, 330][settings.grain]) : PIX[settings.grain]), palette: 'rouille' });
-const play = new Play(dr);
-
-const tavScene = new THREE.Scene();
-const tavern = buildTavern(tavScene);
-const tavCam = new THREE.PerspectiveCamera(42, 1, 0.1, 90);
-const ascii = new AsciiView($('#asc'), dr.renderer);
-const SHOTS = {
-  title: { pos: [0.4, 1.5, 4.5], look: [0, 4.4, -9], fov: 55 },
-  menu: { pos: [0.9, 1.45, -1.2], look: [0.1, 1.35, -7], fov: 40 },
+const glc = $('#gl');
+const dither = new Dither(glc);
+const src = canvas(10, 10), ctx = src.getContext('2d');
+let W = 10, H = 10, bake = {};
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2), D = dpr >= 2 ? 2.6 : 1.5;
+  W = Math.min(1500, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
+  src.width = W; src.height = H; dither.size(W, H);
+  bake = {};
+  if (current === 'map') placeNodes();
+}
+const app = {
+  flash(v = 1, mode = 'flash') { if (mode === 'invert') { dither.invert = 1; setTimeout(() => { dither.invert = 0; }, 130); } else { dither.flash = v; setTimeout(() => { dither.flash = 0; }, 160); } },
+  shake() { glc.animate([{ transform: 'translate(0,0)' }, { transform: 'translate(-8px,4px)' }, { transform: 'translate(7px,-5px)' }, { transform: 'translate(-4px,-2px)' }, { transform: 'translate(0,0)' }], { duration: 380, easing: 'steps(5)' }); },
 };
-let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
-let shotFrom = null, shotTo = null, shotK = 1;
-function goShot(name, dur = 2.2) {
-  const s = SHOTS[name]; if (!s) return;
-  shotFrom = { pos: shot.pos.clone(), look: shot.look.clone(), fov: shot.fov };
-  shotTo = { pos: new THREE.Vector3(...s.pos), look: new THREE.Vector3(...s.look), fov: s.fov, dur };
-  shotK = 0;
-}
-window.__vii = { dr, tavScene, tavCam, THREE };
-const frameSvg = $('#sframe-svg');
-const redrawFrame = () => drawScreenFrame(frameSvg);
-redrawFrame();
-addEventListener('resize', () => { ascii.resize(); redrawFrame(); });
+const duel = new Duel(); duel.app = app;
 
-function placeGL() {
-  const slot = $(`#${current} [data-gl]`);
-  if (!slot) { canvas.style.display = 'none'; return; }
-  const r = slot.getBoundingClientRect();
-  if (!r.width || !r.height) { canvas.style.display = 'none'; return; }
-  canvas.style.display = 'block';
-  const cs = getComputedStyle(slot);
-  const bl = parseFloat(cs.borderLeftWidth) || 0, bt = parseFloat(cs.borderTopWidth) || 0;
-  const w = r.width - bl - (parseFloat(cs.borderRightWidth) || 0), h = r.height - bt - (parseFloat(cs.borderBottomWidth) || 0);
-  Object.assign(canvas.style, { left: r.left + bl + 'px', top: r.top + bt + 'px', width: w + 'px', height: h + 'px' });
-  canvas.style.clipPath = cs.borderRadius && cs.borderRadius !== '0px' ? `inset(0 round ${cs.borderRadius})` : 'none';
-  dr.resize(w, h);
-  play.stage.resize(w, h);
-}
-addEventListener('resize', placeGL);
-$$('.spread.scroll, .spread').forEach((s) => s.addEventListener('scroll', placeGL, { passive: true }));
-
-let last = performance.now(), ct = 0;
+let t0 = performance.now(), last = t0;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const t = (now - t0) / 1000;
   if (document.hidden) return;
-  if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
-  if (current === 'intro') return;
-  ct += dt;
-  tavern.tick(ct);
-  if (shotTo) {
-    shotK = Math.min(1, shotK + dt / shotTo.dur);
-    const k = shotK < 0.5 ? 2 * shotK * shotK : 1 - Math.pow(-2 * shotK + 2, 2) / 2;
-    shot.pos.lerpVectors(shotFrom.pos, shotTo.pos, k); shot.look.lerpVectors(shotFrom.look, shotTo.look, k); shot.fov = shotFrom.fov + (shotTo.fov - shotFrom.fov) * k;
-    if (shotK >= 1) shotTo = null;
-  }
-  tavCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15, Math.sin(ct * 0.21) * 0.05, 0));
-  tavCam.fov = shot.fov; tavCam.lookAt(shot.look);
-  ascii.render(tavScene, tavCam, dt, { dim: current === 'codex' || current === 'tavern' ? 0.45 : 1 });
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  (SCREENS[current] || SCREENS.title)(ctx, W, H, t, dt);
+  dither.draw(src);
 }
 
+let duelInk = '#ece8dc';
 function show(id) {
   current = id;
-  document.body.classList.toggle('ingame', id === 'game');
-  if (id === 'title' || id === 'menu') goShot(id);
-  tavern.showPilgrim(id !== 'title');
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
-  dr.setPalette('fange');
-  requestAnimationFrame(placeGL);
-  setTimeout(placeGL, 520);
+  const z = zoneOf(save.node);
+  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: 1.3, gain: 1.08, lift: 0 });
+  if (id === 'map') placeNodes();
 }
 
-// ── utilitaires d'interface ─────────────────────────────────
-function toast(msg, ms = 2800) {
-  const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
-  clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.add('hidden'), ms);
+// ── ÉCRAN TITRE ─────────────────────────────────────────────
+function ogive(cx, top, bot, w) {
+  const p = new Path2D();
+  p.moveTo(cx - w / 2, bot); p.lineTo(cx - w / 2, top + w * 0.62);
+  p.quadraticCurveTo(cx - w / 2, top + w * 0.1, cx, top); p.quadraticCurveTo(cx + w / 2, top + w * 0.1, cx + w / 2, top + w * 0.62);
+  p.lineTo(cx + w / 2, bot); p.closePath();
+  return p;
 }
-function modal(html, onMount) {
-  const m = $('#modal');
-  $('.modal-body', m).innerHTML = html;
-  fillIcons(m);
-  m.classList.remove('hidden');
-  const close = () => { m.classList.add('hidden'); sound.play('click'); };
-  m.onclick = (e) => { if (e.target === m || e.target.closest('[data-close]')) close(); };
-  onMount?.($('.modal-body', m), close);
-  return close;
+function pinnacle(c, x, y, h, s) {
+  c.fillStyle = grad(c, x - 10 * s, 0, x + 10 * s, 0, [[0, 0.1], [0.4, 0.75], [1, 0.1]]);
+  c.beginPath(); c.moveTo(x - 9 * s, y); c.lineTo(x, y - h); c.lineTo(x + 9 * s, y); c.fill();
+  c.fillStyle = '#fff';
+  for (let i = 1; i < 5; i++) {
+    const yy = y - h * i / 5, ww = 9 * s * (1 - i / 5);
+    c.beginPath(); c.moveTo(x - ww, yy); c.lineTo(x - ww - 6 * s, yy - 4 * s); c.lineTo(x - ww, yy - 3 * s); c.fill();
+    c.beginPath(); c.moveTo(x + ww, yy); c.lineTo(x + ww + 6 * s, yy - 4 * s); c.lineTo(x + ww, yy - 3 * s); c.fill();
+  }
+  c.beginPath(); c.arc(x, y - h - 4 * s, 4 * s, 0, TAU); c.fill();
 }
-document.addEventListener('pointerover', (e) => {
-  const b = e.target.closest('button');
-  if (b && !b.disabled && b !== document._h) { document._h = b; sound.play('hover'); }
+function titleScreen(c, W, H, t, dt) {
+  const place = done() ? 'trone' : zoneOf(save.node).place;
+  const key = 'title' + place;
+  if (!bake[key]) { const b = canvas(W, H); ZONE_DRAW[place](b.getContext('2d'), W, H, 4); bake[key] = b; }
+  const s = H / 600, cx = W / 2, top = H * 0.07, bot = H * 0.74, aw = Math.min(W * 0.62, H * 0.82);
+  const arch = ogive(cx, top, bot, aw);
+  c.save(); c.clip(arch);
+  c.drawImage(bake[key], 0, 0);
+  if (place === 'foret') mist(c, W, H, t, 0.6, 0.25);
+  rain(c, W, H, dt, 0.55);
+  c.restore();
+  // moulures de l'arc
+  c.strokeStyle = '#fff'; c.lineWidth = 3 * s; c.stroke(arch);
+  for (const [k, lw] of [[14, 1.5], [24, 1], [34, 2.5]]) { c.lineWidth = lw * s; c.strokeStyle = `rgba(255,255,255,${0.9 - k / 60})`; c.stroke(ogive(cx, top - k * s, bot, aw + k * 2 * s)); }
+  // crochets le long de l'arc
+  for (let i = 1; i < 12; i++) {
+    const k = i / 12, side = k < 0.5 ? -1 : 1, kk = side < 0 ? k * 2 : (1 - k) * 2;
+    const x = cx + side * (aw / 2 + 34 * s) * (1 - kk * kk * 0.98), y = top - 34 * s + (aw * 0.62) * (1 - Math.sqrt(kk)) * 1.0;
+    c.fillStyle = '#fff'; c.beginPath(); c.ellipse(x, y, 4 * s, 8 * s, side * (0.6 + kk), 0, TAU); c.fill();
+  }
+  // pinacles et colonnettes
+  for (const sx of [-1, 1]) {
+    const x = cx + sx * (aw / 2 + 52 * s);
+    c.fillStyle = grad(c, x - 12 * s, 0, x + 12 * s, 0, [[0, 0.05], [0.4, 0.6], [1, 0.05]]); c.fillRect(x - 10 * s, top + aw * 0.4, 20 * s, bot - top - aw * 0.4);
+    pinnacle(c, x, top + aw * 0.4, 110 * s, s);
+    for (let y = top + aw * 0.5; y < bot; y += 40 * s) { c.fillStyle = '#000'; c.fillRect(x - 3 * s, y, 6 * s, 22 * s); }
+  }
+  pinnacle(c, cx, top - 38 * s, 70 * s, s);
+  goth(c, 'VII', cx, H * 0.875, H * 0.2, { stroke: 10 * s, fill: '#fff' });
+  goth(c, 'Le Septième Sceau', cx, H * 0.935, H * 0.048, { stroke: 5 * s, fill: '#ddd' });
+  frameSimple(c, W, H);
+}
+
+// ── LE CHEVALIER ─────────────────────────────────────────────
+function knightImage(W, H, pose, kit) {
+  const k = 'kn' + pose + JSON.stringify(kit) + W;
+  if (!bake[k]) { const b = canvas(W, H); drawFigure(b.getContext('2d'), { x: W / 2, y: H * 0.93, s: Math.min(H * 0.72, W * 1.05) / 1000, pose, kit, t: 1.2, breathe: false }); bake[k] = b; }
+  return bake[k];
+}
+function hubScreen(c, W, H, t, dt) {
+  const pose = done() ? 'trone' : POSE_ORDER[save.pose % POSE_ORDER.length];
+  const kit = knightKit(save.unlocked);
+  const s = H / 600;
+  if (has('vitrail')) {
+    vitrail(c, W / 2, H * 0.3, H * 0.3, H * 0.52, t, { k: 0.42 });
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const g = c.createLinearGradient(0, H * 0.2, 0, H); g.addColorStop(0, 'rgba(255,255,255,.1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.beginPath(); c.moveTo(W / 2 - H * 0.15, H * 0.1); c.lineTo(W / 2 + H * 0.15, H * 0.1); c.lineTo(W / 2 + H * 0.5, H); c.lineTo(W / 2 - H * 0.5, H); c.fill();
+    c.restore();
+  } else {
+    c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 2 * s; c.stroke(ogive(W / 2, H * 0.06, H * 0.92, H * 0.5));
+  }
+  if (done()) {
+    c.fillStyle = grad(c, W / 2 - 120 * s, 0, W / 2 + 120 * s, 0, [[0, 0.04], [0.4, 0.3], [1, 0.04]]);
+    c.beginPath(); c.moveTo(W / 2 - 110 * s, H * 0.9); c.lineTo(W / 2 - 110 * s, H * 0.3); c.lineTo(W / 2, H * 0.12); c.lineTo(W / 2 + 110 * s, H * 0.3); c.lineTo(W / 2 + 110 * s, H * 0.9); c.fill();
+  }
+  c.fillStyle = radial(c, W / 2, H * 0.93, 4, H * 0.45, [[0, 0.4], [0.5, 0.12], [1, 0]]); c.beginPath(); c.ellipse(W / 2, H * 0.93, H * 0.45, H * 0.07, 0, 0, TAU); c.fill();
+  glow(c, W / 2, H * 0.35, H * 0.4, 0.06);
+  if (has('etendard')) etendard(c, W / 2 - H * 0.46, H * 0.95, H / 1500, t, 1500 / H);
+  const img = knightImage(W, H, pose, kit);
+  const br = Math.sin(t * 1.2) * 0.004;
+  c.save(); c.translate(W / 2, H * 0.93); c.scale(1, 1 + br); c.translate(-W / 2, -H * 0.93); c.drawImage(img, 0, 0); c.restore();
+  if (has('trophees')) trophees(c, W / 2, H * 0.97, H / 1700, 1700 / H);
+  if (has('brume')) { mist(c, W, H, t, 0.72, 0.3); fireflies(c, W, H, t); }
+  if (has('pluie')) rain(c, W, H, dt, 0.7);
+  if (has('cendres')) ash(c, W, H, dt);
+  dust(c, W, H, t, 0.35);
+  vignette(c, W, H, 0.8, 0.3);
+  if (has('cadre')) frameHonneurs(c, W, H, t); else frameSimple(c, W, H);
+}
+
+// ── LA ROUTE ─────────────────────────────────────────────────
+const NODE_POS = [
+  [0.09, 0.74], [0.16, 0.66], [0.23, 0.72], [0.3, 0.6],
+  [0.4, 0.68], [0.47, 0.6], [0.54, 0.66], [0.6, 0.54],
+  [0.7, 0.62], [0.77, 0.52], [0.84, 0.58], [0.9, 0.38],
+];
+function mapStatic(c, W, H) {
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  c.fillStyle = grad(c, 0, 0, 0, H * 0.75, [[0, 0], [1, 0.12]]); c.fillRect(0, 0, W, H);
+  c.fillStyle = radial(c, W * 0.62, H * 0.16, 2, H * 0.08, [[0, 1], [0.8, 0.8], [1, 0]]); c.beginPath(); c.arc(W * 0.62, H * 0.16, H * 0.055, 0, TAU); c.fill();
+  glow(c, W * 0.62, H * 0.16, H * 0.25, 0.2);
+  const r = rng(8), s = H / 600;
+  c.fillStyle = '#0d0d0d';
+  c.beginPath(); c.moveTo(0, H); for (let x = 0; x <= W; x += 8) c.lineTo(x, H * (0.62 - 0.12 * Math.sin(x / W * 3.1) * (x / W)) - fbm(x / 40, 1, 3) * 30 * s); c.lineTo(W, H); c.fill();
+  for (let i = 0; i < 80; i++) {
+    const x = r() * W * 0.36, base = H * (0.55 + r() * 0.35), h = (40 + r() * 70) * s;
+    c.fillStyle = grad(c, x - h * 0.3, 0, x + h * 0.3, 0, [[0, 0.04], [0.45, 0.28 + r() * 0.1], [1, 0.03]]);
+    for (let j = 0; j < 4; j++) { const yy = base - h * (j / 4), ww = h * 0.32 * (1 - j / 5); c.beginPath(); c.moveTo(x - ww, yy); c.lineTo(x, yy - h * 0.42); c.lineTo(x + ww, yy); c.fill(); }
+  }
+  const bx = W * 0.5, by = H * 0.58;
+  c.fillStyle = grad(c, bx - 120 * s, 0, bx + 120 * s, 0, [[0, 0.12], [0.5, 0.4], [1, 0.1]]);
+  c.fillRect(bx - 150 * s, by - 60 * s, 300 * s, 70 * s);
+  for (const sx of [-1, 1]) { c.fillRect(bx + sx * 70 * s - 22 * s, by - 120 * s, 44 * s, 130 * s); c.beginPath(); c.moveTo(bx + sx * 70 * s - 28 * s, by - 120 * s); c.lineTo(bx + sx * 70 * s, by - 170 * s); c.lineTo(bx + sx * 70 * s + 28 * s, by - 120 * s); c.fill(); }
+  c.fillStyle = '#000'; c.beginPath(); c.moveTo(bx - 22 * s, by + 10 * s); c.lineTo(bx - 22 * s, by - 30 * s); c.quadraticCurveTo(bx, by - 60 * s, bx + 22 * s, by - 30 * s); c.lineTo(bx + 22 * s, by + 10 * s); c.fill();
+  for (let x = bx - 150 * s; x < bx + 150 * s; x += 14 * s) c.fillRect(x, by - 68 * s, 8 * s, 10 * s);
+  const cx = W * 0.86, cy = H * 0.44;
+  c.fillStyle = grad(c, cx - 140 * s, 0, cx + 140 * s, 0, [[0, 0.05], [0.4, 0.35], [1, 0.05]]);
+  c.beginPath(); c.moveTo(cx - 200 * s, H * 0.75); c.lineTo(cx - 120 * s, cy + 40 * s); c.lineTo(cx + 120 * s, cy + 40 * s); c.lineTo(cx + 200 * s, H * 0.75); c.fill();
+  for (const [dx, w, h] of [[-90, 40, 110], [-40, 34, 150], [0, 60, 190], [50, 34, 140], [95, 40, 100]]) {
+    const x = cx + dx * s;
+    c.fillStyle = grad(c, x - w * s / 2, 0, x + w * s / 2, 0, [[0, 0.08], [0.4, 0.45], [1, 0.06]]);
+    c.fillRect(x - w * s / 2, cy + 40 * s - h * s, w * s, h * s);
+    c.beginPath(); c.moveTo(x - w * s * 0.6, cy + 40 * s - h * s); c.lineTo(x, cy + 40 * s - h * s - w * s * 1.1); c.lineTo(x + w * s * 0.6, cy + 40 * s - h * s); c.fill();
+    for (let y = cy + 30 * s - h * s; y < cy + 30 * s; y += 30 * s) { c.fillStyle = r() < 0.3 ? '#fff' : '#000'; c.fillRect(x - 2 * s, y, 4 * s, 9 * s); }
+  }
+  c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2 * s; c.setLineDash([3 * s, 6 * s]);
+  c.beginPath(); NODE_POS.forEach(([x, y], i) => (i ? c.lineTo(x * W, y * H) : c.moveTo(x * W, y * H))); c.stroke(); c.setLineDash([]);
+  ZONES.forEach((z, i) => goth(c, z.name, W * (0.2 + i * 0.3), H * 0.93, 26 * s, { stroke: 4 * s }));
+  frameSimple(c, W, H);
+}
+function mapScreen(c, W, H, t) {
+  if (!bake.map) { bake.map = canvas(W, H); mapStatic(bake.map.getContext('2d'), W, H); }
+  c.drawImage(bake.map, 0, 0);
+  const s = H / 600;
+  NODE_POS.forEach(([nx, ny], i) => {
+    const x = nx * W, y = ny * H, boss = FOES[i].boss, R = (boss ? 16 : 10) * s;
+    if (i < save.node) skullFace(c, x, y + 2 * s, s * (boss ? 0.42 : 0.3), { k: 1, sc: 1 / s }, { teeth: true });
+    else if (i === save.node) {
+      const p = 0.5 + 0.5 * Math.sin(t * 4);
+      glow(c, x, y, R * 4, 0.35 * p + 0.15);
+      c.strokeStyle = '#fff'; c.lineWidth = 2.5 * s; c.beginPath(); c.arc(x, y, R + p * 6 * s, 0, TAU); c.stroke();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, R * 0.55, 0, TAU); c.fill();
+    } else {
+      c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1.5 * s; c.beginPath(); c.arc(x, y, R * 0.7, 0, TAU); c.stroke();
+    }
+    if (boss && i >= save.node) { c.strokeStyle = '#fff'; c.lineWidth = 1.5 * s; c.beginPath(); c.moveTo(x - R, y - R * 1.1); c.lineTo(x - R * 0.6, y - R * 1.8); c.lineTo(x, y - R * 1.3); c.lineTo(x + R * 0.6, y - R * 1.8); c.lineTo(x + R, y - R * 1.1); c.stroke(); }
+  });
+  mist(c, W, H, t, 0.7, 0.12);
+}
+function placeNodes() {
+  const box = $('#nodes'); box.innerHTML = '';
+  $('#preview').classList.add('hidden');
+  NODE_POS.forEach(([x, y], i) => {
+    const b = document.createElement('button');
+    b.style.left = x * 100 + 'vw'; b.style.top = y * 100 + 'vh';
+    b.disabled = i !== save.node;
+    b.setAttribute('aria-label', FOES[i].name);
+    if (i === save.node) {
+      b.onmouseenter = b.onfocus = () => showPreview(i, x, y);
+      b.onmouseleave = b.onblur = () => $('#preview').classList.add('hidden');
+      b.onclick = () => { sound.play('click'); $('#preview').classList.add('hidden'); startDuel(); };
+    }
+    box.appendChild(b);
+  });
+  if (save.node < 12 && innerWidth < 760) { const [x, y] = NODE_POS[save.node]; showPreview(save.node, x, y); }
+}
+const previews = {};
+function showPreview(i, x, y) {
+  const pv = $('#pv');
+  if (!previews[i]) {
+    const cv = canvas(140, 154), c = cv.getContext('2d');
+    c.fillStyle = '#000'; c.fillRect(0, 0, 140, 154);
+    c.fillStyle = radial(c, 70, 60, 2, 110, [[0, 0.35], [1, 0]]); c.fillRect(0, 0, 140, 154);
+    drawFigure(c, { x: 70, y: 52 + 905 * 0.12, s: 0.12, pose: 'table', kit: FOES[i].kit, t: 2, bust: true, breathe: false });
+    previews[i] = ditherCanvas(cv, { ink: zoneOf(i).ink, gamma: 1.4 });
+  }
+  pv.width = 140; pv.height = 154; pv.getContext('2d').drawImage(previews[i], 0, 0);
+  $('#pv-name').textContent = FOES[i].name;
+  const p = $('#preview'); p.style.left = Math.min(Math.max(x, 0.12), 0.88) * 100 + 'vw'; p.style.top = y * 100 + 'vh'; p.classList.remove('hidden');
+}
+
+// ── LE DUEL ──────────────────────────────────────────────────
+let session = null, paused = false;
+async function startDuel() {
+  if (done()) return;
+  const n = save.node, z = Math.floor(n / 4), j = n % 4;
+  const foe = FOES[n], zone = ZONES[z];
+  const dealer = j < 3 ? FOES[z * 4 + 3] : null;
+  const myStart = j === 0 ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1], target = PALIERS[j];
+  duelInk = zone.ink;
+  duel.setup({ foe, dealer, place: zone.place === 'chateau' && j === 3 ? 'trone' : zone.place, meId: 'me', foeId: 'foe', kit: knightKit(save.unlocked), target, ink: zone.ink });
+  show('duel');
+  sound.stopMusic(); sound.startMusic('table'); sound.play('enter');
+  const ban = $('#banner');
+  ban.innerHTML = `<b>${foe.name}</b><small>— premier à ${target} —</small>`;
+  ban.classList.add('on');
+  await wait(2600);
+  ban.classList.remove('on');
+  const players = [{ id: 'me', name: 'Toi', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', score: oppStart }];
+  const controllers = {
+    me: { decide: () => duel.askDecision(), chooseTarget: (s, p, kind, c) => duel.askTarget(kind, c) },
+    foe: makeAI(null, { risk: foe.risk }),
+  };
+  const match = new Match({
+    players, controllers, target, dealer: 1,
+    presenter: async (ev, snap) => { while (paused) await wait(100); await duel.present(ev, snap); },
+  });
+  session = { match, n };
+  let winner;
+  try { winner = await match.run(); } catch { return; }
+  if (session?.match !== match) return;
+  const me = match.players.find((p) => p.id === 'me');
+  session = null;
+  if (winner === 'me') return victory(n, me.score);
+  return defeat(n);
+}
+
+let unlockState = null, deathState = null;
+function victory(n, score) {
+  const foe = FOES[n], j = n % 4;
+  const gained = [];
+  for (const k of [foe.reward, foe.ambiance, foe.extra]) if (k && !has(k)) { save.unlocked.push(k); gained.push(k); }
+  if (!save.ranks.includes(n + 1)) save.ranks.push(n + 1);
+  setUnlockedRanks(save.ranks);
+  save.score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
+  save.node = Math.max(save.node, n + 1);
+  save.pose = (save.pose + 1) % POSE_ORDER.length;
+  persist();
+  unlockState = { n, gained: gained.length ? gained : [foe.reward], t: 0 };
+  sound.stopMusic(); sound.play('win');
+  show('unlock');
+  const uc = $('#unlock-card');
+  uc.innerHTML = `<div class="cd down"><div class="cd-in"><img class="f" src="${face({ t: 'n', v: n + 1, id: 'u' }, 200)}" alt=""><img class="b" src="${back(200)}" alt=""></div></div>`;
+  setTimeout(() => { uc.querySelector('.cd')?.classList.remove('down'); sound.play('flip'); }, 1600);
+}
+function unlockScreen(c, W, H, t, dt) {
+  const u = unlockState; if (!u) return;
+  u.t += dt;
+  const s = H / 600, kit = knightKit(save.unlocked), narrow = W < H;
+  const kx = narrow ? W * 0.5 : W * 0.4;
+  glow(c, kx, H * 0.45, H * 0.45, 0.1);
+  c.fillStyle = radial(c, kx, H * 0.9, 4, H * 0.4, [[0, 0.45], [1, 0]]); c.beginPath(); c.ellipse(kx, H * 0.9, H * 0.4, H * 0.07, 0, 0, TAU); c.fill();
+  const k = 'unl' + JSON.stringify(kit) + W + save.pose;
+  if (!bake[k]) { const b = canvas(W, H); drawFigure(b.getContext('2d'), { x: kx, y: H * 0.88, s: H * (narrow ? 0.45 : 0.6) / 1000, pose: POSE_ORDER[save.pose % 3], kit, t: 1, breathe: false }); bake[k] = b; }
+  c.save(); c.globalAlpha = clamp(u.t / 1.2); c.drawImage(bake[k], 0, 0); c.restore();
+  const names = u.gained.map((g) => ITEMS[g]?.name).filter(Boolean);
+  c.save(); c.globalAlpha = clamp((u.t - 0.6) / 0.8);
+  goth(c, names[0] || '', W / 2, H * 0.12, Math.min(H * 0.085, W * 0.07), { stroke: 6 * s });
+  names.slice(1).forEach((nm, i) => goth(c, '+ ' + nm, W / 2, H * 0.19 + i * H * 0.05, H * 0.04, { stroke: 4 * s }));
+  c.restore();
+  if (u.gained.includes('pluie')) rain(c, W, H, dt, 0.6);
+  if (u.gained.includes('cendres')) ash(c, W, H, dt);
+  if (u.gained.includes('brume')) { mist(c, W, H, t, 0.72, 0.3); fireflies(c, W, H, t); }
+  dust(c, W, H, t, 0.4);
+  if (u.gained.includes('cadre')) frameHonneurs(c, W, H, t); else frameSimple(c, W, H);
+}
+
+function defeat(n) {
+  const z = Math.floor(n / 4);
+  deathState = { n, t: 0, zone: ZONES[z] };
+  save.node = z * 4; save.score = 0; persist();
+  sound.stopMusic(); sound.play('lose');
+  show('death');
+}
+function deathScreen(c, W, H, t, dt) {
+  const d = deathState; if (!d) return;
+  d.t += dt;
+  const foe = FOES[d.n], k = 'death' + d.n + W;
+  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const s = H / 700; glow(bc, W / 2, H * 0.4, H * 0.6, 0.3); drawFigure(bc, { x: W / 2, y: H * 0.18 + 905 * s, s, pose: 'table', kit: foe.kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
+  const z = 1 + Math.min(0.15, d.t * 0.03);
+  c.save(); c.translate(W / 2, H * 0.4); c.scale(z, z); c.translate(-W / 2, -H * 0.4); c.globalAlpha = clamp(d.t / 1.5); c.drawImage(bake[k], 0, 0); c.restore();
+  c.fillStyle = grad(c, 0, H * 0.45, 0, H, [[0, 0], [1, 0]]);
+  const g = c.createLinearGradient(0, H * 0.4, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.6, 'rgba(0,0,0,.95)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  ash(c, W, H, dt);
+  const s = H / 600;
+  c.save(); c.globalAlpha = clamp((d.t - 1) / 1);
+  goth(c, 'Les âmes te réclament.', W / 2, H * 0.78, Math.min(H * 0.08, W * 0.075), { stroke: 6 * s });
+  goth(c, 'Tu renais : ' + d.zone.name, W / 2, H * 0.86, Math.min(H * 0.035, W * 0.04), { stroke: 4 * s });
+  c.restore();
+  vignette(c, W, H, 0.9, 0.25);
+}
+
+const SCREENS = { title: titleScreen, hub: hubScreen, map: mapScreen, duel: (c, W, H, t, dt) => duel.render(c, W, H, t, dt), unlock: unlockScreen, death: deathScreen };
+
+// ── navigation ───────────────────────────────────────────────
+$$('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+let started = false;
+$('#title').addEventListener('click', async () => {
+  if (!started) { started = true; await sound.init(); sound.startMusic('menu'); }
+  sound.play('enter');
+  show('hub');
 });
-const updateSound = () => $$('[data-sound-toggle]').forEach((b) => { b.innerHTML = icon(sound.muted ? 'mute' : 'note'); b.classList.toggle('off', !!sound.muted); });
-$$('[data-sound-toggle]').forEach((b) => b.addEventListener('click', () => { sound.setMuted(!sound.muted); updateSound(); }));
+addEventListener('keydown', (e) => {
+  if (current === 'title' && (e.key === 'Enter' || e.key === ' ')) $('#title').click();
+  if (current === 'duel' && e.key === 'Escape') togglePause();
+});
+$('#to-map').addEventListener('click', (e) => { e.stopPropagation(); sound.play('click'); show('map'); });
+$('#map-back').addEventListener('click', () => { sound.play('click'); show('hub'); });
+const backToHub = () => { sound.play('click'); sound.startMusic('menu'); show('hub'); };
+$('#unlock').addEventListener('click', () => { if (unlockState?.t > 1.6) backToHub(); });
+$('#death').addEventListener('click', () => { if (deathState?.t > 1.8) backToHub(); });
 
-// ── le pèlerin ───────────────────────────────────────────────
-let helm = store.get('helm', 0);
-const myName = () => ($('#name').value.trim() || 'Pèlerin').slice(0, 14);
-function renderMe() {
-  $('#helm-name').textContent = HELMS[helm];
-  tavern.setPilgrim(helm);
+function togglePause(force) {
+  paused = force ?? !paused;
+  $('#pause-menu').classList.toggle('hidden', !paused);
+  $('[data-p=sound] b').textContent = sound.muted ? 'coupé' : 'actif';
 }
-$$('[data-helm]').forEach((b) => b.addEventListener('click', () => { helm = (helm + +b.dataset.helm + 4) % 4; store.set('helm', helm); sound.play('click'); renderMe(); }));
-$('#name').addEventListener('input', (e) => store.set('name', e.target.value));
+$('#pause').addEventListener('click', () => { sound.play('click'); togglePause(true); });
+$('#pause-menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-p]'); if (!b) return;
+  sound.play('click');
+  if (b.dataset.p === 'resume') togglePause(false);
+  if (b.dataset.p === 'sound') { sound.setMuted(!sound.muted); togglePause(true); }
+  if (b.dataset.p === 'flee') {
+    togglePause(false);
+    if (session) { session.match.aborted = true; session = null; }
+    duel.cancel();
+    backToHub();
+  }
+});
 
-// ── COUVERTURE ───────────────────────────────────────────────
-async function boot() {
+// ── démarrage ───────────────────────────────────────────────
+addEventListener('resize', resize);
+(async () => {
+  await Promise.all(['60px Jacquard', '700 20px Grenze'].map((f) => document.fonts.load(f).catch(() => {})));
+  resize();
   show('title');
   requestAnimationFrame(loop);
-  await document.fonts.ready;
-  await Promise.all(['27px Bastarda', '60px Jacquard', '700 30px Grenze', '500 20px Grenze', '11px JBM'].map((f) => document.fonts.load(f).catch(() => {})));
-  placeGL();
-  const b = $('#enter');
-  b.disabled = false; b.textContent = 'Appuie sur une touche';
-  const go = () => { removeEventListener('keydown', go); b.removeEventListener('click', go); enter(); };
-  b.addEventListener('click', go);
-  addEventListener('keydown', go);
-}
-
-async function enter() {
-  await sound.init();
-  sound.play('enter');
-  sound.startMusic('menu');
-  $('#name').value = store.get('name', '');
-  renderMe();
-  show('menu');
-  const code = cleanCode(new URLSearchParams(location.search).get('table'));
-  if (code.length === 5) setTimeout(() => joinFlow(code), 700);
-}
-
-// ── MENU ─────────────────────────────────────────────────────
-$('#menu-list').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  sound.play('click');
-  ({ host: () => hostFlow(), join: () => joinFlow(), random: randomFlow, codex: openCodex, options: optionsModal })[b.dataset.act]?.();
-});
-
-const SOLO = ['fossoyeur', 'terreau', 'clous', 'cierge'];
-$('#go').addEventListener('click', () => { sound.play('click'); startSolo(SOLO.slice(0, settings.opps)); });
-function soloModal() {
-  let n = store.get('opps', 1);
-  modal(`<h2>La table t'attend</h2><p class="sub">Combien de créatures s'assoient avec toi ?</p>
-    <div class="pick">${SOLO.map((k, i) => `<button data-n="${i + 1}"><img alt="" src="${portrait(dr, k, { palette: 'fange', w: 96, h: 112 })}"><span>${i === 0 ? '' : '+ '}${esc(BESTIAIRE[k].name)}</span></button>`).join('')}</div>
-    <div class="row"><button class="btn" data-go>S'asseoir</button></div>`, (b, close) => {
-    b.querySelector('.pick').style.gridTemplateColumns = 'repeat(4, 1fr)';
-    const sel = () => $$('.pick button', b).forEach((x) => x.classList.toggle('sel', +x.dataset.n <= n));
-    sel();
-    b.querySelector('.pick').onclick = (e) => { const x = e.target.closest('button'); if (!x) return; n = +x.dataset.n; store.set('opps', n); sound.play('click'); sel(); };
-    b.querySelector('[data-go]').onclick = () => { close(); startSolo(SOLO.slice(0, n)); };
-  });
-}
-
-function optionsModal() {
-  const v = sound.vol;
-  const G = ['Gros', 'Moyen', 'Fin'], I = { auto: 'Auto', full: 'Complète', short: 'Courte' };
-  modal(`<h2>Réglages</h2><p class="sub">Son, tramage, cinématique.</p>
-    <label class="slider"><span>Musique</span><input type="range" min="0" max="1" step="0.05" value="${v.music}" data-v="music"><b>${Math.round(v.music * 100)}</b></label>
-    <label class="slider"><span>Effets</span><input type="range" min="0" max="1" step="0.05" value="${v.sfx}" data-v="sfx"><b>${Math.round(v.sfx * 100)}</b></label>
-    <button class="toggle" data-t="opps"><span>Créatures à ta table</span><b>${settings.opps}</b></button>
-    <button class="toggle" data-t="grain"><span>Grain du tramage</span><b>${G[settings.grain]}</b></button>
-    <button class="toggle" data-t="risk"><span>Afficher le présage (risque)</span><b>${settings.risk ? 'Oui' : 'Non'}</b></button>
-    <button class="toggle" data-t="intro"><span>Cinématique d'ouverture</span><b>${I[settings.intro]}</b></button>`, (b) => {
-    $$('input[type=range]', b).forEach((r) => r.addEventListener('input', () => { sound.setVolume(r.dataset.v, +r.value); r.nextElementSibling.textContent = Math.round(r.value * 100); }));
-    b.addEventListener('click', (e) => {
-      const t = e.target.closest('[data-t]'); if (!t) return;
-      sound.play('click');
-      const k = t.dataset.t;
-      if (k === 'opps') { settings.opps = settings.opps % 4 + 1; t.lastElementChild.textContent = settings.opps; }
-      if (k === 'grain') { settings.grain = (settings.grain + 1) % 3; t.lastElementChild.textContent = G[settings.grain]; placeGL(); }
-      if (k === 'risk') { settings.risk = !settings.risk; t.lastElementChild.textContent = settings.risk ? 'Oui' : 'Non'; play.showRisk = settings.risk; }
-      if (k === 'intro') { settings.intro = { auto: 'full', full: 'short', short: 'auto' }[settings.intro]; t.lastElementChild.textContent = I[settings.intro]; }
-      saveSettings();
-    });
-  });
-}
-
-// ── PACTE & BESTIAIRE ───────────────────────────────────────
-let codexBuilt = false;
-function openCodex() {
-  if (!codexBuilt) {
-    $('#pacte').innerHTML = PACTE.map(([ic, n, d]) => `<div class="state"><div class="st-ic">${icon(ic)}</div><h3>${esc(n)}</h3><p>${esc(d)}</p></div>`).join('');
-    $('#bestiaire').innerHTML = Object.entries(BESTIAIRE).map(([k, b]) => `
-      <div class="beast">
-        <div class="arch"><img alt="" src="${portrait(dr, k, { palette: 'fange', w: 200, h: 128 })}"></div>
-        <div class="nm">${esc(b.name)}</div>
-        <div class="tt">${esc(b.title)}</div>
-        <div class="tx">${esc(b.text)}</div>
-        <div class="stats">${Object.entries(b.stats).map(([s, v]) => `<span>${s}</span><span class="bar">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= v ? 'on' : ''}"></i>`).join('')}</span>`).join('')}</div>
-        <div class="items">${b.items.map(([ic, n, d]) => `<div>${icon(ic)}<span>${esc(n)}<small>${esc(d)}</small></span></div>`).join('')}</div>
-        <div class="align"><span>Mal</span><span><i style="left:${b.align * 100}%"></i></span><span>Bien</span></div>
-      </div>`).join('');
-    codexBuilt = true;
-  }
-  show('codex');
-}
-$('[data-back]').addEventListener('click', () => { sound.play('click'); show('menu'); });
-
-// ── CINÉMATIQUE EN CASES ─────────────────────────────────────
-async function playIntro() {
-  show('intro');
-  sound.stopMusic();
-  const seen = store.get('seenIntro2', false);
-  const full = settings.intro === 'full' || (settings.intro === 'auto' && !seen);
-  const planches = full ? INTRO : INTRO_SHORT;
-  let skipped = false, next = null;
-  const adv = () => { sound.play('click'); next?.(); };
-  const skip = (e) => { e?.stopPropagation(); skipped = true; next?.(); };
-  $('#intro').onclick = adv;
-  $('#intro-skip').onclick = skip;
-  const onKey = (e) => { if (e.key === 'Escape') skip(); else if (e.key === ' ' || e.key === 'Enter') adv(); };
-  addEventListener('keydown', onKey);
-  sound.play('toll');
-  for (const pl of planches) {
-    if (skipped) break;
-    const img = $('#intro-img');
-    img.src = panel(dr, pl.scene, pl.palette, 320, 220);
-    img.style.animation = 'none'; void img.offsetWidth; img.style.animation = '';
-    const say = $('#intro-say');
-    say.innerHTML = pl.speaker ? `<span class="who">${esc(pl.speaker)}</span>` : '';
-    if (pl.scene === 'fossoyeur') sound.play('enter');
-    for (const line of pl.lines) {
-      if (skipped) break;
-      const s = document.createElement('span'); s.className = 'ln'; say.appendChild(s);
-      let fast = false;
-      next = () => { fast = true; };
-      await typeInto(s, line, { speed: 30, onChar: () => sound.play('type'), skip: () => fast || skipped });
-      await new Promise((res) => { next = res; setTimeout(res, 2400); });
-    }
-  }
-  removeEventListener('keydown', onKey);
-  $('#intro').onclick = null;
-  store.set('seenIntro2', true);
-  sound.play('whoosh');
-}
-
-// ── PARTIES ──────────────────────────────────────────────────
-let session = null;
-const localCtrl = () => ({ decide: () => play.askDecision(), chooseTarget: (s, pid, kind, c) => play.askTarget(kind, c) });
-
-async function runMatch(match, you, { replay, helms } = {}) {
-  play.showRisk = settings.risk;
-  play.stage.speed = 1;
-  play.canReplay = !!replay;
-  play.gate = true;
-  play.onEnd = (c) => { if (c === 'again' && replay) replay(); else leave(); };
-  show('game');
-  play.mount(match.snapshot(), you, { helms });
-  sound.startMusic('table');
-  try { await match.run(); } catch (e) { if (e?.message !== 'aborted') console.error(e); }
-}
-
-async function startSolo(personas) {
-  const players = [{ id: 'you', name: myName(), kind: 'human' }, ...personas.map((k, i) => ({ id: 'ai' + i, name: BESTIAIRE[k].name, kind: 'ai', persona: k }))];
-  const controllers = { you: localCtrl() };
-  personas.forEach((k, i) => { controllers['ai' + i] = makeAI(k); });
-  const match = new Match({ players, controllers, presenter: (ev, snap) => play.present(ev, snap) });
-  session = { kind: 'solo', match };
-  play.chatEnabled = false; $('#chat-in').style.display = 'none';
-  await playIntro();
-  if (session?.match !== match) return;
-  runMatch(match, 'you', { replay: () => startSolo(personas), helms: { you: helm } });
-}
-
-function leave() {
-  if (session) {
-    if (session.match) session.match.aborted = true;
-    play.cancelPrompts();
-    session.host?.close(); session.client?.close();
-    clearInterval(session.countdown);
-  }
-  session = null;
-  play.closeOverlay();
-  sound.stopMusic(); sound.startMusic('menu');
-  show('menu');
-}
-$('#g-quit').onclick = () => {
-  sound.play('click');
-  modal(`<h2>Fuir la table ?</h2><p class="sub">Le Fossoyeur n'oublie jamais ceux qui se lèvent.</p>
-    <div class="row"><button class="btn ghost" data-close>Rester</button><button class="btn" data-yes>Fuir</button></div>`, (b, close) => {
-    b.querySelector('[data-yes]').onclick = () => { close(); leave(); };
-  });
-};
-$('#g-chat').onclick = () => { sound.play('click'); $('#log').classList.toggle(innerWidth < 860 ? 'open' : 'min'); };
-
-// ── TAVERNE ──────────────────────────────────────────────────
-const inviteLink = (code) => `${location.origin}${location.pathname}?table=${code}`;
-function seatPortrait(p) {
-  if (p.kind === 'ai') return portrait(dr, p.persona, { palette: 'fange', w: 96, h: 112 });
-  return portrait(dr, 'pelerin', { variant: p.helm | 0, palette: 'fange', w: 96, h: 112 });
-}
-function renderSeats(players, me) {
-  $('#tav-seats').innerHTML = Array.from({ length: MAX_SEATS }, (_, i) => {
-    const p = players[i];
-    return p ? `<li class="full ${p.id === me ? 'me' : ''}"><div class="arch"><img alt="" src="${seatPortrait(p)}"></div><span>${esc(p.kind === 'ai' ? BESTIAIRE[p.persona].name : p.name)}</span></li>`
-      : `<li><div class="arch">${icon('candle')}</div><span>·</span></li>`;
-  }).join('');
-}
-function tavLog(html) { const ol = $('#tav-log'); const li = document.createElement('li'); li.innerHTML = html; ol.appendChild(li); ol.scrollTop = ol.scrollHeight; }
-function chatLine(from, text) {
-  const h = `<b>${esc(from)}</b> : ${esc(text)}`;
-  tavLog(h); play.log(h, 'chat');
-}
-function openTavern(kind, code, isHost) {
-  show('tavern');
-  $('#tav-kind').textContent = kind;
-  $('#tav-code').textContent = code === 'ERRANCE' ? 'Errance' : code;
-  $('#tav-copy').style.display = isHost && code !== 'ERRANCE' ? '' : 'none';
-  $('#tav-ai').style.display = isHost ? '' : 'none';
-  $('#tav-start').style.display = isHost ? '' : 'none';
-  $('#tav-log').innerHTML = '';
-  $('#tav-in').value = '';
-}
-$('#tav-leave').onclick = () => { sound.play('click'); leave(); };
-$('#tav-in').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.value.trim()) { session?.sendChat?.(e.target.value.trim()); e.target.value = ''; } });
-play.onChat = (text) => session?.sendChat?.(text);
-
-async function hostFlow({ isPublic = false, host: existing = null, code: c0 = null } = {}) {
-  let host = existing, code = c0;
-  if (!host) {
-    for (let k = 0; k < 3 && !host; k++) {
-      code = newCode();
-      try { host = await new Host({ code, name: myName(), helm }).open(); }
-      catch (e) { if (e?.type !== 'unavailable-id') { toast(errText(e), 4200); return; } }
-    }
-    if (!host) { toast(errText('server-error')); return; }
-  }
-  const sendChat = (text) => { host.broadcast({ t: 'chat', from: myName(), text }); chatLine(myName(), text); };
-  session = { kind: 'host', host, sendChat };
-  host.onChat = (pid, text) => { const s = host.seats.find((x) => x.id === pid); host.broadcast({ t: 'chat', from: s?.name || '?', text }); chatLine(s?.name || '?', text); };
-  openTavern(isPublic ? 'Table publique · errance' : 'Table privée', isPublic ? 'ERRANCE' : code, true);
-  $('#tav-copy').onclick = async () => {
-    sound.play('click');
-    try { await navigator.clipboard.writeText(inviteLink(code)); toast('Lien copié. Envoie-le aux vivants.'); } catch { toast(inviteLink(code), 6000); }
-  };
-  $('#tav-ai').onclick = () => {
-    sound.play('click');
-    const used = host.seats.filter((s) => s.kind === 'ai').map((s) => s.persona);
-    const k = SOLO.find((p) => !used.includes(p));
-    if (!k || host.seats.length >= MAX_SEATS) return toast('Plus de place à la table.');
-    host.seats.push({ id: 'ai-' + k, name: BESTIAIRE[k].name, kind: 'ai', persona: k });
-    host.lobby();
-  };
-  const start = $('#tav-start');
-  const refresh = (players) => {
-    renderSeats(players, 'h');
-    start.disabled = players.length < 2;
-    $('#tav-status').textContent = players.length < 2
-      ? (isPublic ? 'Tu attends d\'autres âmes errantes…' : 'Envoie le lien. Les vivants s\'assiéront ici.')
-      : `${players.length} à la table. Ouvre l'Ossuaire quand tu veux.`;
-    if (isPublic && session) {
-      clearInterval(session.countdown);
-      if (players.length >= 2) {
-        let n = players.length >= 4 ? 3 : 20;
-        session.countdown = setInterval(() => {
-          $('#tav-status').textContent = `L'Ossuaire s'ouvre dans ${n}…`;
-          if (--n < 0) { clearInterval(session.countdown); startHosted(host); }
-        }, 1000);
-      }
-    }
-  };
-  host.onLobby = refresh;
-  refresh(host.seats);
-  start.onclick = () => { sound.play('click'); startHosted(host); };
-}
-
-function remoteCtrl(host, pid) {
-  const ai = makeAI('cierge', { fast: true });
-  return {
-    async decide(s, p) { const v = await host.ask(pid, 'decide', {}); return v === 'hit' || v === 'stay' ? v : ai.decide(s, p); },
-    async chooseTarget(s, p, kind, c) { const v = await host.ask(pid, 'target', { kind, cands: c }); return c.includes(v) ? v : ai.chooseTarget(s, p, kind, c); },
-  };
-}
-
-async function startHosted(host) {
-  if (host.started || host.seats.length < 2) return;
-  clearInterval(session?.countdown);
-  host.started = true;
-  const players = host.seats.map((s) => ({ id: s.id, name: s.name, kind: s.id === 'h' ? 'human' : s.kind, persona: s.persona }));
-  const helms = Object.fromEntries(host.seats.map((s) => [s.id, s.helm | 0]));
-  const controllers = {};
-  for (const p of players) {
-    if (p.id === 'h') controllers.h = localCtrl();
-    else if (p.kind === 'ai') controllers[p.id] = makeAI(p.persona);
-    else controllers[p.id] = remoteCtrl(host, p.id);
-  }
-  host.onDrop = (pid) => {
-    controllers[pid] = makeAI('cierge');
-    const p = players.find((x) => x.id === pid);
-    toast(`${p?.name || 'Une âme'} s'est évanouie. L'Enfant-Cierge joue à sa place.`, 4000);
-  };
-  const match = new Match({ players, controllers, presenter: async (ev, snap) => { host.broadcast({ t: 'ev', ev, state: snap }); await play.present(ev, snap); } });
-  session = { ...session, kind: 'host', host, match };
-  host.broadcast({ t: 'start', state: match.snapshot(), helms });
-  play.chatEnabled = true; $('#chat-in').style.display = '';
-  await playIntro();
-  if (session?.match !== match) return;
-  runMatch(match, 'h', { helms });
-}
-
-function joinFlow(prefill = '') {
-  modal(`<h2>Briser un sceau</h2><p class="sub">Les cinq lettres du sceau qu'on t'a confié.</p>
-    <input class="codein" maxlength="5" value="${esc(prefill)}" placeholder="·····" autocomplete="off" spellcheck="false">
-    <p class="sub" data-st style="text-align:center;margin-top:8px"></p>
-    <div class="row"><button class="btn" data-go>Frapper à la dalle</button></div>`, (b, close) => {
-    const inp = b.querySelector('input'), st = b.querySelector('[data-st]');
-    inp.focus();
-    inp.oninput = () => { inp.value = cleanCode(inp.value); };
-    const go = async () => {
-      const code = cleanCode(inp.value);
-      if (code.length !== 5) { st.textContent = 'Un sceau compte cinq lettres.'; return; }
-      sound.play('click'); st.textContent = 'Tu frappes à la dalle…';
-      try { const c = await new Client({ name: myName(), helm }).join(code); close(); enterAsClient(c, code, false); }
-      catch (e) { st.textContent = errText(e); }
-    };
-    b.querySelector('[data-go]').onclick = go;
-    inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-    if (prefill.length === 5) go();
-  });
-}
-
-async function randomFlow() {
-  openTavern('Errance', 'ERRANCE', false);
-  $('#tav-seats').innerHTML = '';
-  session = { kind: 'wander' };
-  try {
-    const r = await wander(myName(), helm, (s) => { $('#tav-status').textContent = s; });
-    if (session?.kind !== 'wander') { r.host?.close(); r.client?.close(); return; }
-    if (r.role === 'host') hostFlow({ isPublic: true, host: r.host, code: r.code });
-    else enterAsClient(r.client, r.code, true);
-  } catch (e) { $('#tav-status').textContent = errText(e); }
-}
-
-function enterAsClient(client, code, isPublic) {
-  session = { kind: 'client', client, sendChat: (text) => client.chat(text) };
-  openTavern(isPublic ? 'Table publique · errance' : 'Table privée', isPublic ? 'ERRANCE' : code, false);
-  $('#tav-status').textContent = 'Tu es assis. L\'hôte ouvrira l\'Ossuaire.';
-  const q = []; let busy = false, curRid = null, mounted = false;
-  const cancelled = new Set();
-  const pump = async () => {
-    if (busy) return; busy = true;
-    while (q.length) {
-      play.stage.speed = q.length > 5 ? 2.4 : q.length > 2 ? 1.4 : 1;
-      try { await q.shift()(); } catch (e) { console.error(e); }
-    }
-    busy = false;
-  };
-  client.on('lobby', (m) => renderSeats(m.players, client.you))
-    .on('chat', (m) => chatLine(m.from, m.text))
-    .on('start', (m) => {
-      play.chatEnabled = true; $('#chat-in').style.display = '';
-      const p = playIntro().then(() => {
-        if (session?.client !== client) return;
-        play.showRisk = settings.risk; play.canReplay = false; play.gate = false;
-        play.onEnd = () => leave();
-        show('game');
-        play.mount(m.state, client.you, { helms: m.helms || {} });
-        mounted = true;
-        sound.startMusic('table');
-      });
-      q.push(() => p); pump();
-    })
-    .on('ev', (m) => { q.push(() => play.present(m.ev, m.state)); pump(); })
-    .on('prompt', (m) => {
-      q.push(async () => {
-        if (cancelled.has(m.rid) || !mounted) return;
-        curRid = m.rid;
-        const v = m.kind === 'decide' ? await play.askDecision() : await play.askTarget(m.data.kind, m.data.cands);
-        curRid = null;
-        if (!cancelled.has(m.rid)) client.reply(m.rid, v);
-      });
-      pump();
-    })
-    .on('cancel', (m) => { cancelled.add(m.rid); if (curRid === m.rid) { play.cancelPrompts(); toast('Trop lent. Le Fossoyeur a choisi pour toi.'); } })
-    .on('closed', () => { if (session?.client === client) { toast('L\'hôte a quitté la table.', 4000); leave(); } });
-}
-
-addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) $('#modal').classList.add('hidden'); });
-updateSound();
-boot();
+})();
+window.__vii = { get save() { return save; }, show };

@@ -4,139 +4,64 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VII — Le Septième Sceau</title>
-<meta name="description" content="Arrache deux cents âmes au Fossoyeur. Jeu de cartes dark fantasy à l'ancienne.">
+<meta name="description" content="Pariez les âmes de vos victimes. Jeu de cartes dark fantasy, tout en points.">
 <meta name="theme-color" content="#000000">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Cpath d='M3 3h2v10H3zM7 3h2v10H7zM11 3h2v10h-2z' fill='%23e8dcae'/%3E%3C/svg%3E">
-<link rel="preload" href="fonts/grenze-gotisch-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Cpath d='M3 3h2v10H3zM7 3h2v10H7zM11 3h2v10h-2z' fill='%23ece8dc'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/jacquard-24-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<canvas id="asc" aria-hidden="true"></canvas>
 <canvas id="gl" aria-hidden="true"></canvas>
-<div id="sframe" aria-hidden="true"><i class="band"></i><svg id="sframe-svg"></svg></div>
-<div id="grain" aria-hidden="true"></div>
 
 <main id="app">
+  <section id="title" class="screen on" aria-label="VII — Le Septième Sceau"></section>
 
-  <!-- ═══ ACCUEIL : la taverne sous la pluie ═══ -->
-  <section id="title" class="screen on">
-    <header class="t-head">
-      <span class="vol">Vol. I</span>
-      <h1 class="logo">VII</h1>
-      <p class="logo-sub">Le Septième Sceau</p>
-    </header>
-    <footer class="t-foot">
-      <p class="tag">— Guide officiel du pèlerin —</p>
-      <button id="enter" class="press" disabled>Les âmes s'éveillent…</button>
-    </footer>
+  <section id="hub" class="screen">
+    <button id="to-map" class="sigil" aria-label="Prendre la route"><span>Prendre la route</span></button>
   </section>
 
-  <!-- ═══ LE SEUIL : le pèlerin devant la porte ═══ -->
-  <section id="menu" class="screen">
-    <header class="t-head small"><h1 class="logo">VII</h1></header>
-    <div class="pilgrim gf">
-      <p class="kick">Le pèlerin</p>
-      <label class="field"><input id="name" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Ton nom"></label>
-      <div class="helm-pick"><button data-helm="-1" aria-label="Heaume précédent">◂</button><span id="helm-name">Heaume-Lune</span><button data-helm="1" aria-label="Heaume suivant">▸</button></div>
-    </div>
-    <button id="go" class="gbtn"><span>Pousser la porte</span></button>
-    <nav id="menu-list" class="minor">
-      <button data-act="host" title="Inviter des amis"><span data-icon="candle"></span><em>Convier</em></button>
-      <button data-act="join" title="Rejoindre une table"><span data-icon="seal"></span><em>Sceau</em></button>
-      <button data-act="random" title="Table au hasard"><span data-icon="door"></span><em>Errer</em></button>
-      <button data-act="codex" title="Règles et bestiaire"><span data-icon="scroll"></span><em>Pacte</em></button>
-      <button data-act="options" title="Réglages"><span data-icon="gear"></span><em>Réglages</em></button>
-      <button data-sound-toggle title="Son"><span data-icon="note"></span><em>Son</em></button>
-    </nav>
+  <section id="map" class="screen">
+    <div id="nodes"></div>
+    <div id="preview" class="hidden"><canvas id="pv"></canvas><b id="pv-name"></b></div>
+    <button id="map-back" class="corner-btn" aria-label="Retour au chevalier">◂</button>
   </section>
 
-  <!-- ═══ PACTE & BESTIAIRE ═══ -->
-  <section id="codex" class="screen">
-    <div class="spread scroll">
-      <article class="page velin">
-        <header class="page-h"><span>Le Pacte</span><span class="ix">iii</span></header>
-        <div class="banner-h"><span data-icon="skull"></span><h2>Les états de l'âme</h2><span data-icon="skull"></span></div>
-        <p class="lead">Prends garde à ce qui peut arriver à la table. Certaines blessures sont plus graves que d'autres.</p>
-        <div id="pacte" class="states"></div>
-        <div class="note-box">Deux cents âmes rachètent la chair. On compte à la fin de chaque manche ; le plus haut total l'emporte.</div>
-      </article>
-      <article class="page fange">
-        <header class="page-h"><span>Bestiaire</span><span class="ix">iv</span></header>
-        <div class="banner-h"><span data-icon="skull"></span><h2>Ceux de la table</h2><span data-icon="skull"></span></div>
-        <div id="bestiaire" class="beasts"></div>
-      </article>
-    </div>
-    <button class="back gbtn small" data-back><span>Refermer le guide</span></button>
-  </section>
-
-  <!-- ═══ TAVERNE (SALON) ═══ -->
-  <section id="tavern" class="screen">
-    <article class="page velin solo-page">
-      <header class="page-h"><span id="tav-kind">Table privée</span><span class="ix">v</span></header>
-      <div class="banner-h"><span data-icon="candle"></span><h2>La Taverne des Noyés</h2><span data-icon="candle"></span></div>
-      <div class="sceau">
-        <small>Sceau de la table</small>
-        <b id="tav-code">·····</b>
-        <button id="tav-copy" class="btn ghost">Copier le lien d'invitation</button>
+  <section id="duel" class="screen">
+    <div id="duel-ui">
+      <div id="gauge" aria-hidden="true">
+        <b id="g-target">30</b>
+        <div class="col"><i id="g-foe-hand" class="hand"></i><i id="g-me-hand" class="hand"></i><span id="g-foe" class="mk foe"><b>0</b></span><span id="g-me" class="mk me"><b>0</b></span></div>
       </div>
-      <ol id="tav-seats" class="seats"></ol>
-      <p id="tav-status" class="status">…</p>
-      <div class="btns">
-        <button id="tav-ai" class="btn ghost">+ Asseoir une créature</button>
-        <button id="tav-start" class="btn" disabled>Ouvrir l'Ossuaire</button>
+      <div id="deck" class="pile" aria-label="L'Ossuaire"></div>
+      <div id="fosse" class="pile"></div>
+      <div id="cards"></div>
+      <span id="v-foe" class="val foe"></span>
+      <span id="v-me" class="val me"></span>
+      <button id="tgt-foe" class="tgt" aria-label="Viser l'adversaire"></button>
+      <button id="tgt-me" class="tgt" aria-label="Te viser toi-même"></button>
+      <span id="tgt-sym"></span>
+      <div id="acts">
+        <button id="act-hit" class="act" title="Arracher une âme (1)"><span data-icon="grab"></span></button>
+        <button id="act-stay" class="act" title="Se retirer (2)"><span data-icon="fist"></span></button>
       </div>
-      <div class="chatbox"><ol id="tav-log"></ol><input id="tav-in" maxlength="120" placeholder="Parler à la table…" autocomplete="off"></div>
-      <footer class="page-f"><button class="link" id="tav-leave">◂ Quitter la taverne</button></footer>
-    </article>
+      <div id="banner"></div>
+      <button id="pause" class="corner-btn" aria-label="Pause">❚❚</button>
+      <div id="inspect" class="hidden"></div>
+    </div>
   </section>
 
-  <!-- ═══ CINÉMATIQUE EN CASES ═══ -->
-  <section id="intro" class="screen">
-    <div class="planche">
-      <div class="pl-img gf"><img id="intro-img" alt=""></div>
-      <div class="pl-say" id="intro-say"></div>
-    </div>
-    <p class="pl-hint">clic : suite</p>
-    <button id="intro-skip" class="link">Passer ▸▸</button>
-  </section>
-
-  <!-- ═══ LA TABLE ═══ -->
-  <section id="game" class="screen">
-    <div class="full" data-gl></div>
-    <div id="plates"></div>
-    <div id="hand"></div>
-    <div id="party"></div>
-    <div id="hud-tr" class="hud-frame">
-      <div class="round"><small>Manche</small><b id="g-round">I</b></div>
-      <div class="deckc" title="Âmes dans l'Ossuaire"><span data-icon="skull"></span><b id="g-deck">94</b></div>
-      <button class="hud-btn" data-sound-toggle title="Son"><span data-icon="note"></span></button>
-      <button class="hud-btn" id="g-chat" title="Journal"><span data-icon="chat"></span></button>
-      <button class="hud-btn" id="g-quit" title="Fuir la table"><span data-icon="door"></span></button>
-    </div>
-    <div id="banner"></div>
-    <div id="log" class="hud-frame"><ol></ol><input id="chat-in" maxlength="120" placeholder="Entrée : parler" autocomplete="off"></div>
-    <div id="say"></div>
-    <div id="bar">
-      <div class="bar-top">
-        <span class="handv"><small>Main</small><b id="g-hand">0</b></span>
-        <span class="omen" title="Présage"><span data-icon="eye"></span><i><u id="g-risk"></u></i></span>
-        <span class="buffs" id="g-buffs"></span>
-      </div>
-      <div class="slots">
-        <button id="b-hit" class="slot" disabled title="Arracher une âme (1)"><span data-icon="grab"></span><kbd>1</kbd><em>Arracher</em></button>
-        <button id="b-stay" class="slot" disabled title="Se retirer (2)"><span data-icon="fist"></span><kbd>2</kbd><em>Se retirer</em></button>
-      </div>
-      <div class="xp"><i id="g-xp"></i><i id="g-xp2"></i><span><b id="g-total">0</b> / 200</span></div>
-    </div>
-    <div id="g-overlay" class="hidden"></div>
-  </section>
+  <section id="unlock" class="screen"><div id="unlock-card"></div></section>
+  <section id="death" class="screen"></section>
 </main>
 
-<div id="modal" class="hidden" role="dialog" aria-modal="true"><div class="sheet velin"><button class="link modal-x" data-close>✕</button><div class="modal-body"></div></div></div>
-<div id="toast" class="hidden"></div>
+<div id="pause-menu" class="hidden">
+  <div class="pm">
+    <button data-p="resume">Reprendre</button>
+    <button data-p="sound">Son : <b>actif</b></button>
+    <button data-p="flee">Fuir la table</button>
+  </div>
+</div>
 
-<script src="vendor/peerjs.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
