@@ -4,13 +4,14 @@
 // ─────────────────────────────────────────────────────────────
 import { Dither, ditherCanvas } from './dither.js';
 import { canvas, grad, radial, glow, vignette, goth, TAU, rng, fbm, clamp } from './paint.js';
-import { drawFigure, POSE_ORDER, etendard, trophees, skullFace } from './figure.js';
-import { ZONE_DRAW, vitrail, mist, rain, ash, fireflies, dust, frameSimple, frameHonneurs } from './places.js';
+import { mist, rain, ash, fireflies, dust, frameSimple, frameHonneurs } from './places.js';
+import { View, portrait, buildFigure } from './world3d.js';
+import { POSE_ORDER, skull } from './body3d.js';
 import { ZONES, FOES, ITEMS, PALIERS, knightKit } from './content.js';
-import { setUnlockedRanks, face, back } from './cards.js';
+import { setUnlockedRanks, setPortrait, face, back } from './cards.js';
 import { Match } from './game.js';
 import { makeAI } from './ai.js';
-import { Duel } from './duel.js';
+import { Duel } from './duel3d.js';
 import { sound } from './audio.js';
 import { icon } from './icons.js';
 
@@ -33,6 +34,7 @@ const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); }
     save.node = n; save.pose = n % 3; persist();
   }
 }
+setPortrait((foe, w, h) => portrait(foe.kit, w, h, { key: foe.name }));
 setUnlockedRanks(save.ranks);
 const has = (k) => save.unlocked.includes(k);
 const done = () => save.node >= 12;
@@ -45,8 +47,8 @@ const dither = new Dither(glc);
 const src = canvas(10, 10), ctx = src.getContext('2d');
 let W = 10, H = 10, bake = {};
 function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, 2), D = dpr >= 2 ? 2.6 : 1.5;
-  W = Math.min(1500, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
+  const dpr = Math.min(devicePixelRatio || 1, 3), D = dpr >= 2 ? dpr * 0.85 : 1.05;
+  W = Math.min(1700, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
   src.width = W; src.height = H; dither.size(W, H);
   bake = {};
   if (current === 'map') placeNodes();
@@ -74,7 +76,7 @@ function show(id) {
   current = id;
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
   const z = zoneOf(save.node);
-  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: 1.3, gain: 1.08, lift: 0 });
+  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: id === 'map' ? 1.3 : 1.55, gain: 1.15, lift: 0 });
   if (id === 'map') placeNodes();
 }
 
@@ -97,14 +99,14 @@ function pinnacle(c, x, y, h, s) {
   }
   c.beginPath(); c.arc(x, y - h - 4 * s, 4 * s, 0, TAU); c.fill();
 }
+const views = {};
 function titleScreen(c, W, H, t, dt) {
   const place = done() ? 'trone' : zoneOf(save.node).place;
-  const key = 'title' + place;
-  if (!bake[key]) { const b = canvas(W, H); ZONE_DRAW[place](b.getContext('2d'), W, H, 4); bake[key] = b; }
+  const view = (views[place] ||= new View(place));
   const s = H / 600, cx = W / 2, top = H * 0.07, bot = H * 0.74, aw = Math.min(W * 0.62, H * 0.82);
   const arch = ogive(cx, top, bot, aw);
   c.save(); c.clip(arch);
-  c.drawImage(bake[key], 0, 0);
+  view.draw(c, W, H, t);
   if (place === 'foret') mist(c, W, H, t, 0.6, 0.25);
   rain(c, W, H, dt, 0.55);
   c.restore();
@@ -131,35 +133,31 @@ function titleScreen(c, W, H, t, dt) {
 }
 
 // ── LE CHEVALIER ─────────────────────────────────────────────
-function knightImage(W, H, pose, kit) {
-  const k = 'kn' + pose + JSON.stringify(kit) + W;
-  if (!bake[k]) { const b = canvas(W, H); drawFigure(b.getContext('2d'), { x: W / 2, y: H * 0.93, s: Math.min(H * 0.72, W * 1.05) / 1000, pose, kit, t: 1.2, breathe: false }); bake[k] = b; }
-  return bake[k];
+let knight = null, knightKey = '';
+function hubView() {
+  const v = (views.hub ||= new View('hub'));
+  const kit = knightKit(save.unlocked), pose = done() ? 'trone' : POSE_ORDER[save.pose % POSE_ORDER.length];
+  const k = JSON.stringify(kit) + pose;
+  if (k !== knightKey) {
+    knight?.root.removeFromParent();
+    knight = buildFigure(kit); knight.setPose(pose); knightKey = k;
+    v.scene.add(knight.root);
+    const H = v.P.honneurs;
+    H.vitrail.visible = has('vitrail'); H.etendard.visible = has('etendard'); H.trophees.visible = has('trophees'); H.throne.visible = done();
+    knight.root.position.set(0, 0.24, done() ? -1.35 : 0);
+    if (done()) knight.root.position.y = 0.24 + 0.72 * 0.9 - 0.48;
+    knight.root.rotation.y = pose === 'salut' ? -0.25 : pose === 'genou' ? 0.5 : 0.3;
+  }
+  return v;
 }
 function hubScreen(c, W, H, t, dt) {
-  const pose = done() ? 'trone' : POSE_ORDER[save.pose % POSE_ORDER.length];
-  const kit = knightKit(save.unlocked);
-  const s = H / 600;
-  if (has('vitrail')) {
-    vitrail(c, W / 2, H * 0.3, H * 0.3, H * 0.52, t, { k: 0.42 });
-    c.save(); c.globalCompositeOperation = 'lighter';
-    const g = c.createLinearGradient(0, H * 0.2, 0, H); g.addColorStop(0, 'rgba(255,255,255,.1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = g; c.beginPath(); c.moveTo(W / 2 - H * 0.15, H * 0.1); c.lineTo(W / 2 + H * 0.15, H * 0.1); c.lineTo(W / 2 + H * 0.5, H); c.lineTo(W / 2 - H * 0.5, H); c.fill();
-    c.restore();
-  } else {
-    c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 2 * s; c.stroke(ogive(W / 2, H * 0.06, H * 0.92, H * 0.5));
-  }
-  if (done()) {
-    c.fillStyle = grad(c, W / 2 - 120 * s, 0, W / 2 + 120 * s, 0, [[0, 0.04], [0.4, 0.3], [1, 0.04]]);
-    c.beginPath(); c.moveTo(W / 2 - 110 * s, H * 0.9); c.lineTo(W / 2 - 110 * s, H * 0.3); c.lineTo(W / 2, H * 0.12); c.lineTo(W / 2 + 110 * s, H * 0.3); c.lineTo(W / 2 + 110 * s, H * 0.9); c.fill();
-  }
-  c.fillStyle = radial(c, W / 2, H * 0.93, 4, H * 0.45, [[0, 0.4], [0.5, 0.12], [1, 0]]); c.beginPath(); c.ellipse(W / 2, H * 0.93, H * 0.45, H * 0.07, 0, 0, TAU); c.fill();
-  glow(c, W / 2, H * 0.35, H * 0.4, 0.06);
-  if (has('etendard')) etendard(c, W / 2 - H * 0.46, H * 0.95, H / 1500, t, 1500 / H);
-  const img = knightImage(W, H, pose, kit);
-  const br = Math.sin(t * 1.2) * 0.004;
-  c.save(); c.translate(W / 2, H * 0.93); c.scale(1, 1 + br); c.translate(-W / 2, -H * 0.93); c.drawImage(img, 0, 0); c.restore();
-  if (has('trophees')) trophees(c, W / 2, H * 0.97, H / 1700, 1700 / H);
+  const v = hubView();
+  const tall = H > W;
+  const low = knight.pose === 'genou' ? -0.12 : 0;
+  v.setCam(tall ? [0, 1.5 + low, 5.8] : [0.5, 1.45 + low, 4.6], [0, (tall ? 1.2 : 1.12) + low, 0], tall ? 40 : 34);
+  v.drift = 0.6;
+  knight.update(t);
+  v.draw(c, W, H, t, { portrait: false });
   if (has('brume')) { mist(c, W, H, t, 0.72, 0.3); fireflies(c, W, H, t); }
   if (has('pluie')) rain(c, W, H, dt, 0.7);
   if (has('cendres')) ash(c, W, H, dt);
@@ -214,7 +212,7 @@ function mapScreen(c, W, H, t) {
   const s = H / 600;
   NODE_POS.forEach(([nx, ny], i) => {
     const x = nx * W, y = ny * H, boss = FOES[i].boss, R = (boss ? 16 : 10) * s;
-    if (i < save.node) skullFace(c, x, y + 2 * s, s * (boss ? 0.42 : 0.3), { k: 1, sc: 1 / s }, { teeth: true });
+    if (i < save.node) { c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, R * 0.7, 0, TAU); c.fill(); c.fillStyle = '#000'; c.fillRect(x - R * 0.4, y - R * 0.2, R * 0.3, R * 0.3); c.fillRect(x + R * 0.1, y - R * 0.2, R * 0.3, R * 0.3); }
     else if (i === save.node) {
       const p = 0.5 + 0.5 * Math.sin(t * 4);
       glow(c, x, y, R * 4, 0.35 * p + 0.15);
@@ -248,11 +246,7 @@ const previews = {};
 function showPreview(i, x, y) {
   const pv = $('#pv');
   if (!previews[i]) {
-    const cv = canvas(140, 154), c = cv.getContext('2d');
-    c.fillStyle = '#000'; c.fillRect(0, 0, 140, 154);
-    c.fillStyle = radial(c, 70, 60, 2, 110, [[0, 0.35], [1, 0]]); c.fillRect(0, 0, 140, 154);
-    drawFigure(c, { x: 70, y: 52 + 905 * 0.12, s: 0.12, pose: 'table', kit: FOES[i].kit, t: 2, bust: true, breathe: false });
-    previews[i] = ditherCanvas(cv, { ink: zoneOf(i).ink, gamma: 1.4 });
+    previews[i] = ditherCanvas(portrait(FOES[i].kit, 140, 154, { key: FOES[i].name }), { ink: zoneOf(i).ink, gamma: 1.3 });
   }
   pv.width = 140; pv.height = 154; pv.getContext('2d').drawImage(previews[i], 0, 0);
   $('#pv-name').textContent = FOES[i].name;
@@ -316,13 +310,14 @@ function victory(n, score) {
 function unlockScreen(c, W, H, t, dt) {
   const u = unlockState; if (!u) return;
   u.t += dt;
-  const s = H / 600, kit = knightKit(save.unlocked), narrow = W < H;
-  const kx = narrow ? W * 0.5 : W * 0.4;
-  glow(c, kx, H * 0.45, H * 0.45, 0.1);
-  c.fillStyle = radial(c, kx, H * 0.9, 4, H * 0.4, [[0, 0.45], [1, 0]]); c.beginPath(); c.ellipse(kx, H * 0.9, H * 0.4, H * 0.07, 0, 0, TAU); c.fill();
-  const k = 'unl' + JSON.stringify(kit) + W + save.pose;
-  if (!bake[k]) { const b = canvas(W, H); drawFigure(b.getContext('2d'), { x: kx, y: H * 0.88, s: H * (narrow ? 0.45 : 0.6) / 1000, pose: POSE_ORDER[save.pose % 3], kit, t: 1, breathe: false }); bake[k] = b; }
-  c.save(); c.globalAlpha = clamp(u.t / 1.2); c.drawImage(bake[k], 0, 0); c.restore();
+  const s = H / 600, narrow = W < H;
+  const v = hubView();
+  const a = u.t * 0.25;
+  v.setCam(narrow ? [Math.sin(a) * 4.8, 1.8, Math.cos(a) * 4.8 + 1.4] : [Math.sin(a) * 3.8 - 1.1, 1.5, Math.cos(a) * 3.8], [narrow ? 0 : -0.55, narrow ? 1.5 : 1.25, 0], 36);
+  v.drift = 0;
+  knight.update(t);
+  c.save(); c.globalAlpha = clamp(u.t / 1.2); v.draw(c, W, H, t, { portrait: false }); c.restore();
+  vignette(c, W, H, 0.7, 0.3);
   const names = u.gained.map((g) => ITEMS[g]?.name).filter(Boolean);
   c.save(); c.globalAlpha = clamp((u.t - 0.6) / 0.8);
   goth(c, names[0] || '', W / 2, H * 0.12, Math.min(H * 0.085, W * 0.07), { stroke: 6 * s });
@@ -346,7 +341,7 @@ function deathScreen(c, W, H, t, dt) {
   const d = deathState; if (!d) return;
   d.t += dt;
   const foe = FOES[d.n], k = 'death' + d.n + W;
-  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const s = H / 700; glow(bc, W / 2, H * 0.4, H * 0.6, 0.3); drawFigure(bc, { x: W / 2, y: H * 0.18 + 905 * s, s, pose: 'table', kit: foe.kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
+  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const ph = Math.round(H * 0.9), pw = Math.round(ph * 0.9); bc.drawImage(portrait(foe.kit, pw, ph, { key: foe.name + 'mort', zoom: 1.25 }), (W - pw) / 2, 0); bake[k] = b; }
   const z = 1 + Math.min(0.15, d.t * 0.03);
   c.save(); c.translate(W / 2, H * 0.4); c.scale(z, z); c.translate(-W / 2, -H * 0.4); c.globalAlpha = clamp(d.t / 1.5); c.drawImage(bake[k], 0, 0); c.restore();
   c.fillStyle = grad(c, 0, H * 0.45, 0, H, [[0, 0], [1, 0]]);

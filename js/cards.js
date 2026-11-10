@@ -1,13 +1,13 @@
 // Cartes : faces peintes puis tramées (cache par rang / résolution).
 import { canvas, grad, radial, finish, METAL, glow, TAU, goth } from './paint.js';
-import { drawFigure } from './figure.js';
 import { ditherCanvas } from './dither.js';
 import { FOES } from './content.js';
 import { roman } from './game.js';
 
 const cache = new Map();
-let unlockedRanks = [];
-export function setUnlockedRanks(r) { unlockedRanks = r.slice(); cache.clear(); }
+let unlockedRanks = [], portraitFn = null;
+export function setPortrait(fn) { portraitFn = fn; cache.clear(); raw.clear(); }
+export function setUnlockedRanks(r) { unlockedRanks = r.slice(); cache.clear(); raw.clear(); }
 
 function invert(c, w, h) { c.save(); c.globalCompositeOperation = 'difference'; c.fillStyle = '#e8e8e8'; c.fillRect(0, 0, w, h); c.restore(); }
 function frame(c, w, h, s) {
@@ -46,7 +46,7 @@ function symbol(c, card, cx, cy, r) {
   c.restore();
 }
 
-function paint(card, w) {
+function paint(card, w, dith = true) {
   const h = Math.round(w * 1.46), s = w / 100;
   const cv = canvas(w, h), c = cv.getContext('2d');
   frame(c, w, h, s);
@@ -56,8 +56,8 @@ function paint(card, w) {
     if (foe) {
       invert(c, w, h);
       c.save(); c.beginPath(); c.moveTo(14 * s, h - 22 * s); c.lineTo(14 * s, 52 * s); c.quadraticCurveTo(14 * s, 22 * s, cx, 16 * s); c.quadraticCurveTo(w - 14 * s, 22 * s, w - 14 * s, 52 * s); c.lineTo(w - 14 * s, h - 22 * s); c.closePath(); c.clip();
-      c.fillStyle = radial(c, cx, h * 0.38, 2, h * 0.6, [[0, 0.3], [1, 0]]); c.fillRect(0, 0, w, h);
-      drawFigure(c, { x: cx, y: h * 0.4 + 905 * s * 0.19, s: s * 0.19, pose: 'table', kit: foe.kit, t: 2, bust: true, breathe: false });
+      c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+      if (portraitFn) { const pw = Math.round(w * 0.86), ph = Math.round(h * 0.82); c.drawImage(portraitFn(foe, pw, ph), cx - pw / 2, 16 * s); }
       c.restore();
       c.strokeStyle = '#000'; c.lineWidth = 2.5 * s; c.beginPath(); c.moveTo(14 * s, h - 22 * s); c.lineTo(14 * s, 52 * s); c.quadraticCurveTo(14 * s, 22 * s, cx, 16 * s); c.quadraticCurveTo(w - 14 * s, 22 * s, w - 14 * s, 52 * s); c.lineTo(w - 14 * s, h - 22 * s); c.stroke();
       goth(c, String(card.v), cx, h - 9 * s, 20 * s, { fill: '#000' });
@@ -80,10 +80,10 @@ function paint(card, w) {
     goth(c, lab, cx, card.t === 'm' ? cy + 12 * s : h - 20 * s, card.t === 'm' ? 34 * s : 17 * s, { stroke: 5 * s });
     if (card.t !== 'a') invert(c, w, h);
   }
-  return ditherCanvas(cv, { ink: '#ece8dc', gamma: 1.25 }).toDataURL();
+  return dith ? ditherCanvas(cv, { ink: '#ece8dc', gamma: 1.25 }).toDataURL() : cv;
 }
 
-function paintBack(w) {
+function paintBack(w, dith = true) {
   const h = Math.round(w * 1.46), s = w / 100, cv = canvas(w, h), c = cv.getContext('2d');
   frame(c, w, h, s);
   const cx = w / 2, cy = h / 2;
@@ -92,10 +92,12 @@ function paintBack(w) {
   c.strokeStyle = '#fff'; c.lineWidth = 2 * s; c.beginPath(); c.arc(cx, cy, 30 * s, 0, TAU); c.stroke();
   for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + k * TAU / 7; c.fillStyle = '#fff'; c.beginPath(); c.arc(cx + Math.cos(a) * 30 * s, cy + Math.sin(a) * 30 * s, 4 * s, 0, TAU); c.fill(); }
   goth(c, 'VII', cx, cy + 9 * s, 28 * s);
-  return ditherCanvas(cv, { gamma: 1.2 }).toDataURL();
+  return dith ? ditherCanvas(cv, { gamma: 1.2 }).toDataURL() : cv;
 }
 
 const key = (c) => (c.t === 'n' ? 'n' + c.v : c.t === 'a' ? c.a : c.t + c.v);
 export function face(card, w = 100) { const k = key(card) + '@' + w; if (!cache.has(k)) cache.set(k, paint(card, w)); return cache.get(k); }
 export function back(w = 100) { const k = 'back@' + w; if (!cache.has(k)) cache.set(k, paintBack(w)); return cache.get(k); }
-export { glow, finish, METAL };
+const raw = new Map();
+export function faceCanvas(card, w = 256) { const k = key(card) + '@' + w; if (!raw.has(k)) raw.set(k, paint(card, w, false)); return raw.get(k); }
+export function backCanvas(w = 256) { const k = 'back@' + w; if (!raw.has(k)) raw.set(k, paintBack(w, false)); return raw.get(k); }

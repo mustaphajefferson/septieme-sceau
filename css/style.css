@@ -72,15 +72,14 @@ img { image-rendering: pixelated; }
 .cd.sealed img.f { box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--ink), 4px 6px 0 rgba(0,0,0,.6); }
 .cd.frost img.f { filter: contrast(.6) brightness(1.3); }
 
-.val { position: absolute; left: 50%; transform: translateX(-50%); font: 400 30px/1 "Jacquard", serif; text-shadow: 2px 2px 0 #000; pointer-events: none; }
-.val.foe { top: 48.5vh; font-size: 22px; } .val.me { top: 69vh; left: 36%; }
+.val { position: absolute; transform: translate(-50%, -50%); font: 400 30px/1 "Jacquard", serif; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+.val.foe { font-size: 24px; }
 .val.bust { color: #000; background: var(--ink); padding: 0 6px; }
 .val.stayed, .val.frozen { text-decoration: underline; }
 
 .tgt { position: absolute; display: none; border: 2px dashed var(--ink); animation: blink .6s steps(2) infinite; }
 .tgt.on { display: block; }
-#tgt-foe { left: 34vw; width: 32vw; top: 8vh; height: 40vh; }
-#tgt-me { left: 22vw; width: 56vw; top: 70vh; height: 22vh; }
+#tgt-foe, #tgt-me { width: min(24vw, 200px); height: min(32vh, 260px); transform: translate(-50%, -50%); }
 @keyframes blink { 50% { border-color: transparent; } }
 #tgt-sym { position: absolute; left: 50%; top: 52vh; transform: translateX(-50%); font-size: 40px; display: none; filter: drop-shadow(2px 2px 0 #000); }
 #tgt-sym.on { display: block; }
@@ -115,7 +114,5 @@ img { image-rendering: pixelated; }
   #gauge { left: 8px; height: 34vh; top: 34%; }
   .sigil span { font-size: 22px; padding: 18px 22px 8px; }
   #preview { width: 160px; } #preview canvas { width: 160px; height: 175px; }
-  #tgt-foe { left: 25vw; width: 50vw; }
   #unlock-card { right: 50%; transform: translate(50%, 0); top: auto; bottom: 8vh; width: 120px; }
-  .val.me { top: 68vh; left: 18%; }
 }
