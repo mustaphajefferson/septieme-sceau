@@ -1,25 +1,22 @@
 # VII — Le Septième Sceau
 
-Jeu de cartes à risque (règles de *Flip 7*), dark fantasy, entièrement tramé en points (dither 1-bit).
+Jeu de cartes à risque (règles de *Flip 7*), dark fantasy à l'ancienne : rendu tramé façon vieux jeu, guide du pèlerin, vue subjective à la table.
 
-Tu joues un chevalier qui parie les âmes de ceux qu'il a tués. Sur la route — la Forêt des Pendus, le Pont-levis, le Château du Roi déchu — tu affrontes 12 adversaires en duels à paliers (premier à 30, puis 50, puis 100, puis 200 contre le boss, qui distribue les cartes avant de s'asseoir). Chaque victoire te donne l'illustration d'un rang de carte (toutes les cartes de ce rang la prennent) et une relique au choix parmi trois, qui rejoint ton deck. Les reliques ne servent que toi : si l'adversaire en tire une, elle brûle sans effet. Si tu perds, les âmes te réclament : tu renais au début de la zone, en gardant ce que tu as gagné.
+Tu es un pèlerin qui parie les âmes de ceux qu'il a tués. La route mène de la Forêt des Pendus au Pont-levis puis au Château du Roi déchu : 12 duels (premier à 30, puis 50, puis 100 ; le boss donne les cartes puis s'assoit : premier à 200). Chaque victoire donne au rang N le visage du vaincu et une relique au choix, qui rejoint ton deck (elle ne sert que toi : si l'adversaire la tire, elle brûle). Perdre, c'est renaître au début du lieu, en gardant visages et reliques.
 
 ## Écrans
-Titre (le lieu de ta prochaine bataille) → ton deck (rangs illustrés, reliques, clic pour inspecter) → la route → le duel (vue subjective, cartes posées sur la table, clic sur une carte pour l'inspecter) → le butin.
+Accueil (le lieu du prochain duel, en ASCII) → le seuil (« Que veux-tu faire ? ») → la route · ton deck · Pacte & Bestiaire → la table → le butin (ou la mort).
 
 ## Raccourcis de test
 `?reset` efface la progression · `?jusqua=N` simule N victoires.
 
 ## Structure
 ```
-js/dither.js   tramage 1-bit (GPU) et tramage des images fixes
-js/paint.js    matières peintes : métal rayé, mailles, bois, pierre, tissu, fourrure
-js/figure.js   chevalier articulé, 4 poses, pièces débloquables, adversaires, gantelets
-js/places.js   lieux, vitrail, cadres, ambiances (brume, pluie, cendres)
-js/cards.js    faces de cartes (rangs débloqués = portrait de l'adversaire vaincu)
-js/content.js  zones, adversaires, récompenses
-js/duel.js     la table
-js/main.js     écrans et progression
-js/game.js     moteur de règles · js/ai.js adversaires · js/audio.js son
+js/content.js  zones, adversaires, reliques, textes du bestiaire
+js/world.js    décors (extérieurs, table par lieu), créatures, gantelets
+js/stage.js    la table en vue subjective · js/play.js mise en scène et interface
+js/handview.js cartes tenues en main · js/cardtex.js faces de cartes
+js/render.js   tramage en palette · js/asciiview.js accueil ASCII
+js/main.js     écrans et progression · js/game.js règles · js/ai.js adversaires
 ```
 Lancer en local : `python3 -m http.server 8000`

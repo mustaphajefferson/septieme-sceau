@@ -35,7 +35,7 @@ export function buildDeck(extra = []) {
   for (const a of ['freeze', 'three', 'chance']) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
   for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
   deck.push({ id: id(), t: 'x', v: 2 });
-  extra.forEach((c, k) => deck.push({ ...c, id: 'r' + k, relic: true, owner: 'me' }));
+  extra.forEach((c, k) => deck.push({ relic: true, owner: 'me', ...c, id: 'r' + k }));
   return deck; // 94 + reliques
 }
 

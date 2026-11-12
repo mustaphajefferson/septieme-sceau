@@ -1,29 +1,35 @@
 // ─────────────────────────────────────────────────────────────
-//  VII — LE SEPTIÈME SCEAU
-//  Titre → le Deck → la Route → le Duel → le butin (ou la mort)
+//  VII — LE SEPTIÈME SCEAU · chef d'orchestre
+//  Accueil (le lieu du prochain duel) → le seuil → la route,
+//  le deck, le guide → la table → le butin (ou la mort).
 // ─────────────────────────────────────────────────────────────
-import { Dither, ditherCanvas } from './dither.js';
-import { canvas, grad, radial, glow, vignette, goth, TAU, rng, fbm, clamp } from './paint.js';
-import { drawFigure, skullFace } from './figure.js';
-import { ZONE_DRAW, mist, rain, ash, fireflies, dust, frameSimple } from './places.js';
-import { ZONES, FOES, PALIERS, RELICS, relicCard, offer } from './content.js';
-import { setUnlockedRanks, face, back } from './cards.js';
+import { THREE, DitherRenderer } from './render.js';
+import { buildExterior } from './world.js';
+import { AsciiView } from './asciiview.js';
+import { installFrameVars, drawScreenFrame } from './frames.js';
+import { portrait, portraitCanvas } from './gallery.js';
+import { Play } from './play.js';
+import { sound } from './audio.js';
 import { Match, RANK_NAMES } from './game.js';
 import { makeAI } from './ai.js';
-import { Duel } from './duel.js';
-import { sound } from './audio.js';
 import { icon } from './icons.js';
+import { BESTIAIRE, PACTE } from './lore.js';
+import { ZONES, FOES, PALIERS, RELICS, relicCard, offer } from './content.js';
+import { setRankArt, faceURL, backURL, clearFaces } from './cardtex.js';
+import { wait } from './fx.js';
+import { setHandArt } from './handview.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+installFrameVars();
 
 // ── sauvegarde ───────────────────────────────────────────────
-const KEY = 'vii-save-3';
+const KEY = 'vii-save-4';
 const fresh = () => ({ ranks: [], relics: [], node: 0, score: 0 });
 let save = (() => { try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fresh(); } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { /* */ } };
-{ // raccourcis de test : ?reset  ·  ?jusqua=N (débloque les N premiers combats)
+{ // raccourcis de test : ?reset · ?jusqua=N
   const q = new URLSearchParams(location.search);
   if (q.has('reset')) { save = fresh(); persist(); }
   if (q.has('jusqua')) {
@@ -33,396 +39,300 @@ const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); }
     save.node = n; persist();
   }
 }
-setUnlockedRanks(save.ranks);
 const done = () => save.node >= 12;
-const zoneOf = (n) => ZONES[Math.min(2, Math.floor(Math.min(n, 11) / 4))];
+const zoneIdx = (n) => Math.min(2, Math.floor(Math.min(n, 11) / 4));
+const zoneOf = (n) => ZONES[zoneIdx(n)];
+const PAL = { foret: 'fange', pont: 'rouille', chateau: 'velin' };
+
+// ── icônes & curseur ─────────────────────────────────────────
+const fillIcons = (root = document) => $$('[data-icon]', root).forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+fillIcons();
+{
+  const svg = icon('grab').replace('class="px "', 'xmlns="http://www.w3.org/2000/svg" width="32" height="32"').replace(/currentColor/g, '#e9e3bf');
+  const outline = svg.replace('<path', '<path transform="translate(1 1)" fill="#000" ').replace(/fill="#e9e3bf" opacity=".45"/, 'fill="#000"');
+  document.body.style.cursor = `url("data:image/svg+xml,${encodeURIComponent(outline)}") 8 2, auto`;
+}
 
 // ── rendu ────────────────────────────────────────────────────
 let current = 'title';
-const glc = $('#gl');
-const dither = new Dither(glc);
-const src = canvas(10, 10), ctx = src.getContext('2d');
-let W = 10, H = 10, bake = {};
-function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, 2), D = dpr >= 2 ? 2.6 : 1.5;
-  W = Math.min(1500, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
-  src.width = W; src.height = H; dither.size(W, H);
-  bake = {};
-  if (current === 'map') placeNodes();
-}
-const app = {
-  flash(v = 1, mode = 'flash') { if (mode === 'invert') { dither.invert = 1; setTimeout(() => { dither.invert = 0; }, 130); } else { dither.flash = v; setTimeout(() => { dither.flash = 0; }, 160); } },
-  shake() { glc.animate([{ transform: 'translate(0,0)' }, { transform: 'translate(-8px,4px)' }, { transform: 'translate(7px,-5px)' }, { transform: 'translate(-4px,-2px)' }, { transform: 'translate(0,0)' }], { duration: 380, easing: 'steps(5)' }); },
-};
-const duel = new Duel(); duel.app = app;
+const canvas = $('#gl');
+const dr = new DitherRenderer(canvas, { pixel: (w, h) => Math.max(2, Math.min(w, h) / 250), palette: 'fange' });
+const play = new Play(dr);
+const art = (i, w = 96, h = 112) => portrait(dr, 'f' + i, { palette: 'velin', w, h });
+setRankArt(Object.assign((v) => (v >= 1 && save.ranks.includes(v) ? portraitCanvas(dr, 'f' + (v - 1), { palette: 'velin', w: 148, h: 150 }) : null), { label: (v) => FOES[v - 1]?.name || '' }));
 
-let t0 = performance.now(), last = t0;
+setHandArt((v) => (v >= 1 && save.ranks.includes(v) ? { url: portrait(dr, 'f' + (v - 1), { palette: 'velin', w: 148, h: 150 }), name: FOES[v - 1].name } : null));
+const extScene = new THREE.Scene();
+const ext = buildExterior(extScene);
+const extCam = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
+const ascii = new AsciiView($('#asc'), dr.renderer);
+const SHOTS = {
+  title: { pos: [0.4, 1.6, 5.5], look: [0, 4.2, -12], fov: 55 },
+  menu: { pos: [-1.6, 1.5, -1.0], look: [-0.6, 1.6, -9], fov: 44 },
+};
+let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
+let shotFrom = null, shotTo = null, shotK = 1;
+function goShot(name, dur = 2.2) {
+  const s = SHOTS[name]; if (!s) return;
+  shotFrom = { pos: shot.pos.clone(), look: shot.look.clone(), fov: shot.fov };
+  shotTo = { pos: new THREE.Vector3(...s.pos), look: new THREE.Vector3(...s.look), fov: s.fov, dur };
+  shotK = 0;
+}
+const frameSvg = $('#sframe-svg');
+const redrawFrame = () => drawScreenFrame(frameSvg);
+redrawFrame();
+addEventListener('resize', () => { ascii.resize(); redrawFrame(); });
+
+function placeGL() {
+  const slot = $(`#${current} [data-gl]`);
+  if (!slot) { canvas.style.display = 'none'; return; }
+  const r = slot.getBoundingClientRect();
+  if (!r.width || !r.height) { canvas.style.display = 'none'; return; }
+  canvas.style.display = 'block';
+  Object.assign(canvas.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', clipPath: 'none' });
+  dr.resize(r.width, r.height);
+  play.stage.resize(r.width, r.height);
+}
+addEventListener('resize', placeGL);
+
+let last = performance.now(), ct = 0;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  const t = (now - t0) / 1000;
   if (document.hidden) return;
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  (SCREENS[current] || SCREENS.title)(ctx, W, H, t, dt);
-  dither.draw(src);
+  if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
+  ct += dt;
+  ext.tick(ct);
+  if (shotTo) {
+    shotK = Math.min(1, shotK + dt / shotTo.dur);
+    const k = shotK < 0.5 ? 2 * shotK * shotK : 1 - Math.pow(-2 * shotK + 2, 2) / 2;
+    shot.pos.lerpVectors(shotFrom.pos, shotTo.pos, k); shot.look.lerpVectors(shotFrom.look, shotTo.look, k); shot.fov = shotFrom.fov + (shotTo.fov - shotFrom.fov) * k;
+    if (shotK >= 1) shotTo = null;
+  }
+  extCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15, Math.sin(ct * 0.21) * 0.05, 0));
+  extCam.fov = shot.fov; extCam.lookAt(shot.look);
+  ascii.render(extScene, extCam, dt, { dim: ['title', 'menu'].includes(current) ? 1 : 0.4 });
 }
 
-let duelInk = '#ece8dc';
 function show(id) {
   current = id;
+  document.body.classList.toggle('ingame', id === 'game');
+  if (id === 'title' || id === 'menu') goShot(id);
+  ext.setZone(zoneOf(save.node).place);
+  ext.showPilgrim(id !== 'title');
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
-  const z = zoneOf(save.node);
-  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: 1.3, gain: 1.08, lift: 0 });
-  if (id === 'map') placeNodes();
-  if (id === 'hub') buildDeck();
+  requestAnimationFrame(placeGL);
+  setTimeout(placeGL, 520);
 }
 
-// ── ÉCRAN TITRE ─────────────────────────────────────────────
-function ogive(cx, top, bot, w) {
-  const p = new Path2D();
-  p.moveTo(cx - w / 2, bot); p.lineTo(cx - w / 2, top + w * 0.62);
-  p.quadraticCurveTo(cx - w / 2, top + w * 0.1, cx, top); p.quadraticCurveTo(cx + w / 2, top + w * 0.1, cx + w / 2, top + w * 0.62);
-  p.lineTo(cx + w / 2, bot); p.closePath();
-  return p;
+document.addEventListener('pointerover', (e) => {
+  const b = e.target.closest('button');
+  if (b && !b.disabled && b !== document._h) { document._h = b; sound.play('hover'); }
+});
+const updateSound = () => {
+  $$('[data-sound-toggle]').forEach((b) => { b.innerHTML = icon(sound.muted ? 'mute' : 'note'); b.classList.toggle('off', !!sound.muted); });
+  $('#m-sound').textContent = sound.muted ? 'coupé' : 'actif';
+};
+$$('[data-sound-toggle]').forEach((b) => b.addEventListener('click', () => { sound.setMuted(!sound.muted); updateSound(); }));
+
+// ── carte agrandie (inspection) ─────────────────────────────
+function inspect(url) {
+  const v = $('#cardview'), c = $('.cv-card', v);
+  $('img', c).src = url;
+  v.classList.remove('hidden');
+  sound.play('flip');
+  v.onpointermove = (e) => {
+    const r = c.getBoundingClientRect(), mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
+    c.style.setProperty('--mx', mx * 100 + '%'); c.style.setProperty('--my', my * 100 + '%');
+    c.style.setProperty('--rx', ((0.5 - my) * 16).toFixed(1) + 'deg'); c.style.setProperty('--ry', ((mx - 0.5) * 20).toFixed(1) + 'deg');
+  };
+  v.onclick = () => v.classList.add('hidden');
 }
-function pinnacle(c, x, y, h, s) {
-  c.fillStyle = grad(c, x - 10 * s, 0, x + 10 * s, 0, [[0, 0.1], [0.4, 0.75], [1, 0.1]]);
-  c.beginPath(); c.moveTo(x - 9 * s, y); c.lineTo(x, y - h); c.lineTo(x + 9 * s, y); c.fill();
-  c.fillStyle = '#fff';
-  for (let i = 1; i < 5; i++) {
-    const yy = y - h * i / 5, ww = 9 * s * (1 - i / 5);
-    c.beginPath(); c.moveTo(x - ww, yy); c.lineTo(x - ww - 6 * s, yy - 4 * s); c.lineTo(x - ww, yy - 3 * s); c.fill();
-    c.beginPath(); c.moveTo(x + ww, yy); c.lineTo(x + ww + 6 * s, yy - 4 * s); c.lineTo(x + ww, yy - 3 * s); c.fill();
-  }
-  c.beginPath(); c.arc(x, y - h - 4 * s, 4 * s, 0, TAU); c.fill();
+
+// ── ACCUEIL ──────────────────────────────────────────────────
+async function boot() {
+  show('title');
+  requestAnimationFrame(loop);
+  await document.fonts.ready;
+  await Promise.all(['27px Bastarda', '60px Jacquard', '700 30px Grenze', '500 20px Grenze', '11px JBM'].map((f) => document.fonts.load(f).catch(() => {})));
+  clearFaces();
+  placeGL();
+  const b = $('#enter');
+  b.disabled = false; b.textContent = 'Appuie sur une touche';
+  const go = () => { removeEventListener('keydown', go); b.removeEventListener('click', go); enter(); };
+  b.addEventListener('click', go);
+  addEventListener('keydown', go);
 }
-function titleScreen(c, W, H, t, dt) {
-  const place = done() ? 'trone' : zoneOf(save.node).place;
-  const key = 'title' + place;
-  if (!bake[key]) { const b = canvas(W, H); ZONE_DRAW[place](b.getContext('2d'), W, H, 4); bake[key] = b; }
-  const s = H / 600, cx = W / 2, top = H * 0.07, bot = H * 0.74, aw = Math.min(W * 0.62, H * 0.82);
-  const arch = ogive(cx, top, bot, aw);
-  c.save(); c.clip(arch);
-  c.drawImage(bake[key], 0, 0);
-  if (place === 'foret') mist(c, W, H, t, 0.6, 0.25);
-  rain(c, W, H, dt, 0.55);
-  c.restore();
-  // moulures de l'arc
-  c.strokeStyle = '#fff'; c.lineWidth = 3 * s; c.stroke(arch);
-  for (const [k, lw] of [[14, 1.5], [24, 1], [34, 2.5]]) { c.lineWidth = lw * s; c.strokeStyle = `rgba(255,255,255,${0.9 - k / 60})`; c.stroke(ogive(cx, top - k * s, bot, aw + k * 2 * s)); }
-  // crochets le long de l'arc
-  for (let i = 1; i < 12; i++) {
-    const k = i / 12, side = k < 0.5 ? -1 : 1, kk = side < 0 ? k * 2 : (1 - k) * 2;
-    const x = cx + side * (aw / 2 + 34 * s) * (1 - kk * kk * 0.98), y = top - 34 * s + (aw * 0.62) * (1 - Math.sqrt(kk)) * 1.0;
-    c.fillStyle = '#fff'; c.beginPath(); c.ellipse(x, y, 4 * s, 8 * s, side * (0.6 + kk), 0, TAU); c.fill();
+async function enter() {
+  await sound.init();
+  sound.play('enter');
+  sound.startMusic('menu');
+  updateSound();
+  openMenu();
+}
+
+// ── LE SEUIL ─────────────────────────────────────────────────
+function openMenu() {
+  const n = Math.min(save.node, 11), z = zoneOf(save.node), j = n % 4;
+  $('#m-zone').textContent = z.name;
+  if (done()) {
+    $('#m-kick').textContent = 'La route est achevée';
+    $('#m-foe').textContent = 'Le trône est vide';
+    $('#m-tier').textContent = 'le Mage viendra';
+    $('#m-go').textContent = 'Rejouer le Roi déchu';
+    $('#m-go-sub').textContent = 'premier à 200';
+  } else {
+    $('#m-kick').textContent = FOES[n].boss ? 'Le maître des lieux' : 'Prochain duel · ' + (j + 1) + ' / 4';
+    $('#m-foe').textContent = FOES[n].name;
+    $('#m-tier').textContent = 'premier à ' + PALIERS[j];
+    $('#m-go').textContent = 'Affronter ' + FOES[n].name.replace(/^(Le |La |L')/, (m) => m.toLowerCase());
+    $('#m-go-sub').textContent = j < 3 ? FOES[Math.floor(n / 4) * 4 + 3].name + ' donne les cartes' : 'il s\'assoit';
   }
-  // pinacles et colonnettes
-  for (const sx of [-1, 1]) {
-    const x = cx + sx * (aw / 2 + 52 * s);
-    c.fillStyle = grad(c, x - 12 * s, 0, x + 12 * s, 0, [[0, 0.05], [0.4, 0.6], [1, 0.05]]); c.fillRect(x - 10 * s, top + aw * 0.4, 20 * s, bot - top - aw * 0.4);
-    pinnacle(c, x, top + aw * 0.4, 110 * s, s);
-    for (let y = top + aw * 0.5; y < bot; y += 40 * s) { c.fillStyle = '#000'; c.fillRect(x - 3 * s, y, 6 * s, 22 * s); }
-  }
-  pinnacle(c, cx, top - 38 * s, 70 * s, s);
-  goth(c, 'VII', cx, H * 0.875, H * 0.2, { stroke: 10 * s, fill: '#fff' });
-  goth(c, 'Le Septième Sceau', cx, H * 0.935, H * 0.048, { stroke: 5 * s, fill: '#ddd' });
-  frameSimple(c, W, H);
+  $('#m-foe-img').src = art(n);
+  $('#m-deck-sub').textContent = `${save.ranks.length} visage${save.ranks.length > 1 ? 's' : ''} · ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}`;
+  $('#m-route-sub').textContent = `${save.node} / 12`;
+  show('menu');
+}
+$('#menu-list').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  sound.play('click');
+  if (b.hasAttribute('data-sound-toggle-row')) { sound.setMuted(!sound.muted); updateSound(); return; }
+  ({ duel: () => startDuel(done() ? 11 : save.node), deck: openDeck, route: openRoute, codex: openCodex })[b.dataset.act]?.();
+});
+$$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); openMenu(); }));
+
+// ── LA ROUTE ─────────────────────────────────────────────────
+function openRoute() {
+  $('#route-zones').innerHTML = ZONES.map((z, zi) => `<div class="zone"><h3>${esc(z.name)}</h3><ol>${[0, 1, 2, 3].map((j) => {
+    const i = zi * 4 + j, f = FOES[i], st = i < save.node ? 'done' : i === save.node ? 'now' : 'locked';
+    const known = i <= save.node;
+    return `<li><button class="node ${st} ${f.boss ? 'boss' : ''}" data-n="${i}" ${st === 'now' ? '' : 'tabindex="-1"'}>
+      <span class="ar">${known ? `<img alt="" src="${art(i, 54, 60)}">` : '?'}</span>
+      <span><b>${known ? esc(f.name) : '· · ·'}</b><small>${f.boss ? 'boss · premier à 200' : 'premier à ' + PALIERS[j]}</small></span>
+      <span>${icon(st === 'done' ? 'seal' : f.boss ? 'skull' : st === 'now' ? 'candle' : 'door')}</span></button></li>`;
+  }).join('')}</ol></div>`).join('');
+  $('#route-zones').onclick = (e) => { const b = e.target.closest('.node.now'); if (b) { sound.play('click'); startDuel(+b.dataset.n); } };
+  show('route');
 }
 
 // ── LE DECK ──────────────────────────────────────────────────
-function hubScreen(c, W, H, t, dt) {
-  const z = zoneOf(save.node), k = 'deckbg' + z.place + W;
-  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); ZONE_DRAW[z.place](bc, W, H, 4); bc.fillStyle = 'rgba(0,0,0,.72)'; bc.fillRect(0, 0, W, H); bake[k] = b; }
-  c.drawImage(bake[k], 0, 0);
-  glow(c, W / 2, H * 0.35, H * 0.6, 0.08);
-  if (z.place === 'foret') { mist(c, W, H, t, 0.8, 0.18); fireflies(c, W, H, t); }
-  if (z.place === 'pont') rain(c, W, H, dt, 0.5);
-  if (z.place === 'chateau') ash(c, W, H, dt);
-  dust(c, W, H, t, 0.3);
-  vignette(c, W, H, 0.85, 0.3);
-  frameSimple(c, W, H);
-}
-function inspect(card) {
-  const box = $('#inspect');
-  box.innerHTML = `<div class="ins-card"><img src="${face(card, 320)}" alt=""><i class="holo"></i><i class="glare"></i></div>`;
-  box.classList.remove('hidden');
-  const ic = box.querySelector('.ins-card');
-  box.onpointermove = (e) => {
-    const r = ic.getBoundingClientRect(), mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
-    ic.style.setProperty('--mx', mx * 100 + '%'); ic.style.setProperty('--my', my * 100 + '%');
-    ic.style.setProperty('--rx', ((0.5 - my) * 16).toFixed(1) + 'deg'); ic.style.setProperty('--ry', ((mx - 0.5) * 20).toFixed(1) + 'deg');
-  };
-  box.onclick = () => box.classList.add('hidden');
-  sound.play('flip');
-}
-function cardBtn(card, { locked = false, count = '', label = '' } = {}) {
-  const b = document.createElement('button');
-  b.className = 'gc' + (locked ? ' locked' : '');
-  b.innerHTML = `<img src="${locked ? back(120) : face(card, 120)}" alt="${label}">${count ? `<i>${count}</i>` : ''}`;
-  b.title = label;
-  if (!locked) b.onclick = (e) => { e.stopPropagation(); inspect(card); };
-  return b;
-}
-function buildDeck() {
-  const R = $('#grim-ranks'), L = $('#grim-relics');
-  R.innerHTML = ''; L.innerHTML = '';
-  for (let v = 0; v <= 12; v++) {
+function openDeck() {
+  $('#deck-ranks').innerHTML = Array.from({ length: 13 }, (_, v) => {
     const open = v === 0 || save.ranks.includes(v);
-    R.appendChild(cardBtn({ t: 'n', v, id: 'g' + v }, { locked: !open, count: '×' + Math.max(1, v), label: open ? RANK_NAMES[v] : '?' }));
-  }
-  const counts = {};
-  for (const id of save.relics) counts[id] = (counts[id] || 0) + 1;
-  for (const id of Object.keys(counts)) L.appendChild(cardBtn(relicCard(id), { count: counts[id] > 1 ? '×' + counts[id] : '', label: RELICS[id].name }));
-  if (!save.relics.length) L.innerHTML = '<p class="empty">Bats un adversaire pour gagner ta première relique.</p>';
-  $('#grim-title').textContent = done() ? 'Le deck du Roi-tombeur' : 'Ton deck';
+    const url = open ? faceURL({ t: 'n', v }) : backURL();
+    return `<button class="cg ${open ? '' : 'locked'}" data-url="${open ? url : ''}" title="${esc(open ? RANK_NAMES[v] : 'Rang ' + v + ' : bats son gardien')}"><img alt="" src="${url}"><i>×${Math.max(1, v)}</i></button>`;
+  }).join('');
+  const counts = {}; for (const id of save.relics) counts[id] = (counts[id] || 0) + 1;
+  $('#deck-relics').innerHTML = Object.keys(counts).map((id) => { const url = faceURL(relicCard(id)); return `<button class="cg" data-url="${url}" title="${esc(RELICS[id].name)}"><img alt="" src="${url}">${counts[id] > 1 ? `<i>×${counts[id]}</i>` : ''}</button>`; }).join('')
+    || '<p class="empty-note">Aucune relique. Bats une créature pour gagner la première.</p>';
+  $('#deck-count').textContent = `L'Ossuaire compte ${94 + save.relics.length} âmes : 94 communes et ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}.`;
+  $('#deck').onclick = (e) => { const b = e.target.closest('.cg[data-url]'); if (b?.dataset.url) inspect(b.dataset.url); };
+  show('deck');
 }
 
-// ── LA ROUTE ─────────────────────────────────────────────────
-const NODE_POS = [
-  [0.09, 0.74], [0.16, 0.66], [0.23, 0.72], [0.3, 0.6],
-  [0.4, 0.68], [0.47, 0.6], [0.54, 0.66], [0.6, 0.54],
-  [0.7, 0.62], [0.77, 0.52], [0.84, 0.58], [0.9, 0.38],
-];
-function mapStatic(c, W, H) {
-  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-  c.fillStyle = grad(c, 0, 0, 0, H * 0.75, [[0, 0], [1, 0.12]]); c.fillRect(0, 0, W, H);
-  c.fillStyle = radial(c, W * 0.62, H * 0.16, 2, H * 0.08, [[0, 1], [0.8, 0.8], [1, 0]]); c.beginPath(); c.arc(W * 0.62, H * 0.16, H * 0.055, 0, TAU); c.fill();
-  glow(c, W * 0.62, H * 0.16, H * 0.25, 0.2);
-  const r = rng(8), s = H / 600;
-  c.fillStyle = '#0d0d0d';
-  c.beginPath(); c.moveTo(0, H); for (let x = 0; x <= W; x += 8) c.lineTo(x, H * (0.62 - 0.12 * Math.sin(x / W * 3.1) * (x / W)) - fbm(x / 40, 1, 3) * 30 * s); c.lineTo(W, H); c.fill();
-  for (let i = 0; i < 80; i++) {
-    const x = r() * W * 0.36, base = H * (0.55 + r() * 0.35), h = (40 + r() * 70) * s;
-    c.fillStyle = grad(c, x - h * 0.3, 0, x + h * 0.3, 0, [[0, 0.04], [0.45, 0.28 + r() * 0.1], [1, 0.03]]);
-    for (let j = 0; j < 4; j++) { const yy = base - h * (j / 4), ww = h * 0.32 * (1 - j / 5); c.beginPath(); c.moveTo(x - ww, yy); c.lineTo(x, yy - h * 0.42); c.lineTo(x + ww, yy); c.fill(); }
-  }
-  const bx = W * 0.5, by = H * 0.58;
-  c.fillStyle = grad(c, bx - 120 * s, 0, bx + 120 * s, 0, [[0, 0.12], [0.5, 0.4], [1, 0.1]]);
-  c.fillRect(bx - 150 * s, by - 60 * s, 300 * s, 70 * s);
-  for (const sx of [-1, 1]) { c.fillRect(bx + sx * 70 * s - 22 * s, by - 120 * s, 44 * s, 130 * s); c.beginPath(); c.moveTo(bx + sx * 70 * s - 28 * s, by - 120 * s); c.lineTo(bx + sx * 70 * s, by - 170 * s); c.lineTo(bx + sx * 70 * s + 28 * s, by - 120 * s); c.fill(); }
-  c.fillStyle = '#000'; c.beginPath(); c.moveTo(bx - 22 * s, by + 10 * s); c.lineTo(bx - 22 * s, by - 30 * s); c.quadraticCurveTo(bx, by - 60 * s, bx + 22 * s, by - 30 * s); c.lineTo(bx + 22 * s, by + 10 * s); c.fill();
-  for (let x = bx - 150 * s; x < bx + 150 * s; x += 14 * s) c.fillRect(x, by - 68 * s, 8 * s, 10 * s);
-  const cx = W * 0.86, cy = H * 0.44;
-  c.fillStyle = grad(c, cx - 140 * s, 0, cx + 140 * s, 0, [[0, 0.05], [0.4, 0.35], [1, 0.05]]);
-  c.beginPath(); c.moveTo(cx - 200 * s, H * 0.75); c.lineTo(cx - 120 * s, cy + 40 * s); c.lineTo(cx + 120 * s, cy + 40 * s); c.lineTo(cx + 200 * s, H * 0.75); c.fill();
-  for (const [dx, w, h] of [[-90, 40, 110], [-40, 34, 150], [0, 60, 190], [50, 34, 140], [95, 40, 100]]) {
-    const x = cx + dx * s;
-    c.fillStyle = grad(c, x - w * s / 2, 0, x + w * s / 2, 0, [[0, 0.08], [0.4, 0.45], [1, 0.06]]);
-    c.fillRect(x - w * s / 2, cy + 40 * s - h * s, w * s, h * s);
-    c.beginPath(); c.moveTo(x - w * s * 0.6, cy + 40 * s - h * s); c.lineTo(x, cy + 40 * s - h * s - w * s * 1.1); c.lineTo(x + w * s * 0.6, cy + 40 * s - h * s); c.fill();
-    for (let y = cy + 30 * s - h * s; y < cy + 30 * s; y += 30 * s) { c.fillStyle = r() < 0.3 ? '#fff' : '#000'; c.fillRect(x - 2 * s, y, 4 * s, 9 * s); }
-  }
-  c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2 * s; c.setLineDash([3 * s, 6 * s]);
-  c.beginPath(); NODE_POS.forEach(([x, y], i) => (i ? c.lineTo(x * W, y * H) : c.moveTo(x * W, y * H))); c.stroke(); c.setLineDash([]);
-  ZONES.forEach((z, i) => goth(c, z.name, W * (0.2 + i * 0.3), H * 0.93, 26 * s, { stroke: 4 * s }));
-  frameSimple(c, W, H);
-}
-function mapScreen(c, W, H, t) {
-  if (!bake.map) { bake.map = canvas(W, H); mapStatic(bake.map.getContext('2d'), W, H); }
-  c.drawImage(bake.map, 0, 0);
-  const s = H / 600;
-  NODE_POS.forEach(([nx, ny], i) => {
-    const x = nx * W, y = ny * H, boss = FOES[i].boss, R = (boss ? 16 : 10) * s;
-    if (i < save.node) skullFace(c, x, y + 2 * s, s * (boss ? 0.42 : 0.3), { k: 1, sc: 1 / s }, { teeth: true });
-    else if (i === save.node) {
-      const p = 0.5 + 0.5 * Math.sin(t * 4);
-      glow(c, x, y, R * 4, 0.35 * p + 0.15);
-      c.strokeStyle = '#fff'; c.lineWidth = 2.5 * s; c.beginPath(); c.arc(x, y, R + p * 6 * s, 0, TAU); c.stroke();
-      c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, R * 0.55, 0, TAU); c.fill();
-    } else {
-      c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1.5 * s; c.beginPath(); c.arc(x, y, R * 0.7, 0, TAU); c.stroke();
-    }
-    if (boss && i >= save.node) { c.strokeStyle = '#fff'; c.lineWidth = 1.5 * s; c.beginPath(); c.moveTo(x - R, y - R * 1.1); c.lineTo(x - R * 0.6, y - R * 1.8); c.lineTo(x, y - R * 1.3); c.lineTo(x + R * 0.6, y - R * 1.8); c.lineTo(x + R, y - R * 1.1); c.stroke(); }
-  });
-  mist(c, W, H, t, 0.7, 0.12);
-}
-function placeNodes() {
-  const box = $('#nodes'); box.innerHTML = '';
-  $('#preview').classList.add('hidden');
-  NODE_POS.forEach(([x, y], i) => {
-    const b = document.createElement('button');
-    b.style.left = x * 100 + 'vw'; b.style.top = y * 100 + 'vh';
-    b.disabled = i !== save.node;
-    b.setAttribute('aria-label', FOES[i].name);
-    if (i === save.node) {
-      b.onmouseenter = b.onfocus = () => showPreview(i, x, y);
-      b.onmouseleave = b.onblur = () => $('#preview').classList.add('hidden');
-      b.onclick = () => { sound.play('click'); $('#preview').classList.add('hidden'); startDuel(); };
-    }
-    box.appendChild(b);
-  });
-  if (save.node < 12 && innerWidth < 760) { const [x, y] = NODE_POS[save.node]; showPreview(save.node, x, y); }
-}
-const previews = {};
-function showPreview(i, x, y) {
-  const pv = $('#pv');
-  if (!previews[i]) {
-    const cv = canvas(140, 154), c = cv.getContext('2d');
-    c.fillStyle = '#000'; c.fillRect(0, 0, 140, 154);
-    c.fillStyle = radial(c, 70, 60, 2, 110, [[0, 0.35], [1, 0]]); c.fillRect(0, 0, 140, 154);
-    drawFigure(c, { x: 70, y: 52 + 905 * 0.12, s: 0.12, pose: 'table', kit: FOES[i].kit, t: 2, bust: true, breathe: false });
-    previews[i] = ditherCanvas(cv, { ink: zoneOf(i).ink, gamma: 1.4 });
-  }
-  pv.width = 140; pv.height = 154; pv.getContext('2d').drawImage(previews[i], 0, 0);
-  $('#pv-name').textContent = FOES[i].name;
-  const p = $('#preview'); p.style.left = Math.min(Math.max(x, 0.12), 0.88) * 100 + 'vw'; p.style.top = y * 100 + 'vh'; p.classList.remove('hidden');
+// ── PACTE & BESTIAIRE ───────────────────────────────────────
+function openCodex() {
+  $('#pacte').innerHTML = PACTE.map(([ic, n, d]) => `<div class="state"><div class="st-ic">${icon(ic)}</div><h3>${esc(n)}</h3><p>${esc(d)}</p></div>`).join('');
+  $('#bestiaire').innerHTML = FOES.map((f, i) => {
+    const b = BESTIAIRE['f' + i];
+    if (i > save.node) return `<div class="beast"><div class="arch" style="display:grid;place-items:center;font:400 90px var(--jac);color:var(--g2)">?</div><div class="nm">· · ·</div><div class="tt">${esc(zoneOf(i).name)}</div></div>`;
+    return `<div class="beast">
+      <div class="arch"><img alt="" src="${portrait(dr, 'f' + i, { palette: 'fange', w: 200, h: 128 })}"></div>
+      <div class="nm">${esc(b.name)}</div>
+      <div class="tt">${esc(b.title)}</div>
+      <div class="tx">${esc(b.text)}</div>
+      <div class="stats">${Object.entries(b.stats).map(([s, v]) => `<span>${s}</span><span class="bar">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= v ? 'on' : ''}"></i>`).join('')}</span>`).join('')}</div>
+      <div class="items">${b.items.map(([ic, n, d]) => `<div>${icon(ic)}<span>${esc(n)}<small>${esc(d)}</small></span></div>`).join('')}</div>
+      <div class="align"><span>Mal</span><span><i style="left:${b.align * 100}%"></i></span><span>Bien</span></div>
+    </div>`;
+  }).join('');
+  show('codex');
 }
 
 // ── LE DUEL ──────────────────────────────────────────────────
-let session = null, paused = false;
-async function startDuel() {
-  if (done()) return;
-  const n = save.node, z = Math.floor(n / 4), j = n % 4;
-  const foe = FOES[n], zone = ZONES[z];
-  const dealer = j < 3 ? FOES[z * 4 + 3] : null;
-  const myStart = j === 0 ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1], target = PALIERS[j];
-  duelInk = zone.ink;
-  duel.setup({ foe, dealer, place: zone.place === 'chateau' && j === 3 ? 'trone' : zone.place, meId: 'me', foeId: 'foe', kit: {}, target, ink: zone.ink });
-  show('duel');
-  sound.stopMusic(); sound.startMusic('table'); sound.play('enter');
-  const ban = $('#banner');
-  ban.innerHTML = `<b>${foe.name}</b><small>— premier à ${target} —</small>`;
-  ban.classList.add('on');
-  await wait(2600);
-  ban.classList.remove('on');
-  const players = [{ id: 'me', name: 'Toi', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', score: oppStart }];
-  const controllers = {
-    me: { decide: () => duel.askDecision(), chooseTarget: (s, p, kind, c) => duel.askTarget(kind, c) },
-    foe: makeAI(null, { risk: foe.risk }),
-  };
-  const match = new Match({
-    players, controllers, target, dealer: 1, extra: save.relics.map(relicCard),
-    presenter: async (ev, snap) => { while (paused) await wait(100); await duel.present(ev, snap); },
-  });
+let session = null;
+async function startDuel(n) {
+  const z = Math.floor(n / 4), j = n % 4, zone = ZONES[z];
+  const foe = FOES[n], target = PALIERS[j];
+  const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
+  const players = [{ id: 'you', name: 'Pèlerin', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', persona: 'f' + n, score: oppStart }];
+  const controllers = { you: { decide: () => play.askDecision(), chooseTarget: (s, pid, kind, c) => play.askTarget(kind, c) }, foe: makeAI(null, { risk: foe.risk }) };
+  const match = new Match({ players, controllers, target, dealer: 1, extra: save.relics.map(relicCard), presenter: (ev, snap) => play.present(ev, snap) });
   session = { match, n };
-  let winner;
-  try { winner = await match.run(); } catch { return; }
-  if (session?.match !== match) return;
-  const me = match.players.find((p) => p.id === 'me');
+  play.showRisk = true; play.stage.speed = 1; play.gate = true;
+  play.onGameOver = (ev) => { if (session?.match !== match) return; session = null; if (ev.winner === 'you') victory(n, match.players.find((p) => p.id === 'you').score); else defeat(n); };
+  play.stage.crypt.setZone(zone.place);
+  play.stage.setDealer(j < 3 ? 'f' + (z * 4 + 3) : null);
+  show('game');
+  dr.setPalette(PAL[zone.place]);
+  play.mount(match.snapshot(), 'you');
+  $('#g-target').textContent = target;
+  sound.stopMusic(); sound.startMusic('table');
+  play.banner(foe.name);
+  try { await match.run(); } catch (e) { if (e?.message !== 'aborted') console.error(e); }
+}
+function leave() {
+  if (session) { session.match.aborted = true; play.cancelPrompts(); }
   session = null;
-  if (winner === 'me') return victory(n, me.score);
-  return defeat(n);
+  play.closeOverlay();
+  sound.stopMusic(); sound.startMusic('menu');
+  openMenu();
+}
+$('#g-quit').onclick = () => { sound.play('click'); if (confirmFlee()) leave(); };
+let fleeArmed = 0;
+function confirmFlee() { // deux clics pour fuir : la porte clignote
+  const b = $('#g-quit');
+  if (Date.now() - fleeArmed < 2500) return true;
+  fleeArmed = Date.now(); b.classList.add('blink'); setTimeout(() => b.classList.remove('blink'), 2500);
+  return false;
 }
 
-let unlockState = null, deathState = null;
+// ── LE BUTIN ─────────────────────────────────────────────────
 function victory(n, score) {
   const j = n % 4;
   if (!save.ranks.includes(n + 1)) save.ranks.push(n + 1);
-  setUnlockedRanks(save.ranks);
-  save.score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
+  if (!done()) save.score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
   save.node = Math.max(save.node, n + 1);
   persist();
-  unlockState = { n, t: 0, picked: false };
-  sound.stopMusic(); sound.play('win');
-  show('unlock');
-  $('#unlock').classList.remove('picking');
-  const uc = $('#unlock-card'), pk = $('#unlock-pick');
-  pk.classList.add('hidden');
-  uc.innerHTML = `<div class="cd down"><div class="cd-in"><img class="f" src="${face({ t: 'n', v: n + 1, id: 'u' }, 200)}" alt=""><img class="b" src="${back(200)}" alt=""></div></div>`;
-  setTimeout(() => { uc.querySelector('.cd')?.classList.remove('down'); sound.play('flip'); }, 1400);
-  // puis trois reliques à choisir
-  const row = pk.querySelector('.row'); row.innerHTML = '';
+  clearFaces();
+  sound.stopMusic(); sound.startMusic('menu');
+  const z = zoneOf(n);
+  $('#sp-zone').textContent = z.name;
+  $('#sp-title').textContent = FOES[n].name + ' est tombé';
+  $('#sp-lead').textContent = `Le rang ${n + 1} porte désormais son visage. ` + (FOES[n].boss && n === 11 ? 'Le trône est à toi.' : FOES[n].boss ? 'La route s\'ouvre vers ' + ZONES[zoneIdx(n + 1)].name + '.' : '');
+  $('#sp-card').src = faceURL({ t: 'n', v: n + 1 }); $('#sp-back').src = backURL();
+  const flip = $('.flip'); flip.classList.remove('up');
+  const sp = $('#spoils'); sp.classList.remove('picking');
+  const row = $('#sp-relics'); row.innerHTML = '';
+  let taken = false;
   for (const id of offer(n)) {
     const b = document.createElement('button');
-    b.innerHTML = `<span class="gc"><img src="${face(relicCard(id), 140)}" alt=""></span><span>${RELICS[id].name}</span>`;
-    b.onclick = (e) => {
-      e.stopPropagation(); if (unlockState.picked) return;
-      unlockState.picked = true; save.relics.push(id); persist();
-      sound.play('gain'); b.querySelector('.gc').style.transform = 'translateY(-30px) scale(1.1)';
-      setTimeout(backToHub, 700);
+    b.innerHTML = `<img alt="" src="${faceURL(relicCard(id))}"><span>${esc(RELICS[id].name)}</span>`;
+    b.onclick = () => {
+      if (taken) return; taken = true;
+      save.relics.push(id); persist();
+      b.classList.add('taken'); sound.play('gain');
+      setTimeout(openMenu, 900);
     };
     row.appendChild(b);
   }
-  setTimeout(() => { $('#unlock').classList.add('picking'); pk.classList.remove('hidden'); sound.play('whoosh'); }, 3000);
-}
-function unlockScreen(c, W, H, t, dt) {
-  const u = unlockState; if (!u) return;
-  u.t += dt;
-  const s = H / 600;
-  glow(c, W / 2, H * 0.38, H * 0.5, 0.12);
-  c.save(); c.globalAlpha = clamp((u.t - 0.4) / 0.8);
-  const k = 'unlfoe' + u.n + W;
-  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'), sc = H / 900; drawFigure(bc, { x: W / 2, y: H * 0.05 + 905 * sc, s: sc, pose: 'table', kit: FOES[u.n].kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
-  c.globalAlpha *= 0.28; c.drawImage(bake[k], 0, 0); c.restore();
-  c.save(); c.globalAlpha = clamp((u.t - 0.6) / 0.8);
-  goth(c, FOES[u.n].name + ' est tombé', W / 2, H * 0.1, Math.min(H * 0.06, W * 0.06), { stroke: 5 * s });
-  goth(c, 'Rang ' + (u.n + 1) + ' : ' + RANK_NAMES[u.n + 1].toLowerCase(), W / 2, H * 0.16, Math.min(H * 0.035, W * 0.04), { stroke: 3 * s });
-  c.restore();
-  dust(c, W, H, t, 0.4);
-  vignette(c, W, H, 0.8, 0.3);
-  frameSimple(c, W, H);
+  show('spoils');
+  setTimeout(() => { flip.classList.add('up'); sound.play('flip'); }, 900);
+  setTimeout(() => { sp.classList.add('picking'); sound.play('whoosh'); }, 2400);
 }
 
+// ── LA MORT ──────────────────────────────────────────────────
 function defeat(n) {
   const z = Math.floor(n / 4);
-  deathState = { n, t: 0, zone: ZONES[z] };
-  save.node = z * 4; save.score = 0; persist();
-  sound.stopMusic(); sound.play('lose');
+  if (!done()) { save.node = z * 4; save.score = 0; persist(); }
+  sound.stopMusic();
+  $('#dt-zone').textContent = ZONES[z].name;
+  $('#dt-img').src = portrait(dr, 'f' + n, { palette: 'sang', w: 200, h: 230 });
+  $('#dt-lead').textContent = `${FOES[n].name} a gagné ta mise. Les âmes que tu portais t'ont repris. Tu renais à l'orée : ${ZONES[z].name}. Tes visages et tes reliques te suivent.`;
   show('death');
 }
-function deathScreen(c, W, H, t, dt) {
-  const d = deathState; if (!d) return;
-  d.t += dt;
-  const foe = FOES[d.n], k = 'death' + d.n + W;
-  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const s = H / 700; glow(bc, W / 2, H * 0.4, H * 0.6, 0.3); drawFigure(bc, { x: W / 2, y: H * 0.18 + 905 * s, s, pose: 'table', kit: foe.kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
-  const z = 1 + Math.min(0.15, d.t * 0.03);
-  c.save(); c.translate(W / 2, H * 0.4); c.scale(z, z); c.translate(-W / 2, -H * 0.4); c.globalAlpha = clamp(d.t / 1.5); c.drawImage(bake[k], 0, 0); c.restore();
-  c.fillStyle = grad(c, 0, H * 0.45, 0, H, [[0, 0], [1, 0]]);
-  const g = c.createLinearGradient(0, H * 0.4, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.6, 'rgba(0,0,0,.95)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-  ash(c, W, H, dt);
-  const s = H / 600;
-  c.save(); c.globalAlpha = clamp((d.t - 1) / 1);
-  goth(c, 'Les âmes te réclament.', W / 2, H * 0.78, Math.min(H * 0.08, W * 0.075), { stroke: 6 * s });
-  goth(c, 'Tu renais : ' + d.zone.name, W / 2, H * 0.86, Math.min(H * 0.035, W * 0.04), { stroke: 4 * s });
-  c.restore();
-  vignette(c, W, H, 0.9, 0.25);
-}
+$('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); openMenu(); };
 
-const SCREENS = { title: titleScreen, hub: hubScreen, map: mapScreen, duel: (c, W, H, t, dt) => duel.render(c, W, H, t, dt), unlock: unlockScreen, death: deathScreen };
-
-// ── navigation ───────────────────────────────────────────────
-$$('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
-let started = false;
-$('#title').addEventListener('click', async () => {
-  if (!started) { started = true; await sound.init(); sound.startMusic('menu'); }
-  sound.play('enter');
-  show('hub');
-});
-addEventListener('keydown', (e) => {
-  if (current === 'title' && (e.key === 'Enter' || e.key === ' ')) $('#title').click();
-  if (current === 'duel' && e.key === 'Escape') togglePause();
-});
-$('#to-map').addEventListener('click', (e) => { e.stopPropagation(); sound.play('click'); show('map'); });
-$('#map-back').addEventListener('click', () => { sound.play('click'); show('hub'); });
-const backToHub = () => { sound.play('click'); sound.startMusic('menu'); show('hub'); };
-$('#death').addEventListener('click', () => { if (deathState?.t > 1.8) backToHub(); });
-
-function togglePause(force) {
-  paused = force ?? !paused;
-  $('#pause-menu').classList.toggle('hidden', !paused);
-  $('[data-p=sound] b').textContent = sound.muted ? 'coupé' : 'actif';
-}
-$('#pause').addEventListener('click', () => { sound.play('click'); togglePause(true); });
-$('#pause-menu').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-p]'); if (!b) return;
-  sound.play('click');
-  if (b.dataset.p === 'resume') togglePause(false);
-  if (b.dataset.p === 'sound') { sound.setMuted(!sound.muted); togglePause(true); }
-  if (b.dataset.p === 'flee') {
-    togglePause(false);
-    if (session) { session.match.aborted = true; session = null; }
-    duel.cancel();
-    backToHub();
-  }
-});
-
-// ── démarrage ───────────────────────────────────────────────
-addEventListener('resize', resize);
-(async () => {
-  await Promise.all(['60px Jacquard', '700 20px Grenze'].map((f) => document.fonts.load(f).catch(() => {})));
-  resize();
-  show('title');
-  requestAnimationFrame(loop);
-})();
-window.__vii = { get save() { return save; }, show, victory };
+addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#cardview').classList.add('hidden'); });
+window.__vii = { get save() { return save; }, victory, defeat, startDuel, openDeck, openRoute, openMenu };
+boot();
