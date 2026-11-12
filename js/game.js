@@ -26,15 +26,17 @@ const ROMAN = ['N', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
 export const roman = (n) => ROMAN[n] ?? String(n);
 
 // ── Deck ─────────────────────────────────────────────────────
-export function buildDeck(extra = []) {
+export function buildDeck(extra = [], { specials = true } = {}) {
   const deck = [];
   let i = 0;
   const id = () => 'c' + (i++);
   deck.push({ id: id(), t: 'n', v: 0 });
   for (let v = 1; v <= 12; v++) for (let k = 0; k < v; k++) deck.push({ id: id(), t: 'n', v });
-  for (const a of ['freeze', 'three', 'chance']) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
-  for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
-  deck.push({ id: id(), t: 'x', v: 2 });
+  if (specials) {
+    for (const a of ['freeze', 'three', 'chance']) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
+    for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
+    deck.push({ id: id(), t: 'x', v: 2 });
+  }
   extra.forEach((c, k) => deck.push({ relic: true, owner: 'me', ...c, id: 'r' + k }));
   return deck; // 94 + reliques
 }
@@ -86,7 +88,7 @@ export function bustRisk(state, pid) {
 // Composition restante de l'Ossuaire (si on ne voit que la défausse + les mains)
 export function remainingCounts(state) {
   const counts = {};
-  const full = buildDeck(state.extra || []);
+  const full = buildDeck(state.extra || [], { specials: state.specials !== false });
   for (const c of full) counts[key(c)] = (counts[key(c)] || 0) + 1;
   const seen = [...(state.discard || [])];
   for (const p of state.players) seen.push(...p.nums, ...p.mods, ...(p.chance ? [p.chance] : []), ...(p.used || []));
@@ -103,16 +105,17 @@ export class Match {
    * @param {Record<string,{decide:Function,chooseTarget:Function}>} o.controllers
    * @param {(ev:object, snap:object)=>Promise<void>} o.presenter
    */
-  constructor({ players, controllers, presenter, rng = Math.random, target = TARGET, dealer = 0, extra = [] }) {
+  constructor({ players, controllers, presenter, rng = Math.random, target = TARGET, dealer = 0, extra = [], specials = true }) {
     this.target = target;
     this.extra = extra;
+    this.specials = specials;
     this.rng = rng;
     this.players = players.map((p) => ({
       score: 0, ...p, nums: [], mods: [], chance: null, used: [], status: 'active', flip7: false, last: 0,
     }));
     this.controllers = controllers;
     this.presenter = presenter;
-    this.deck = shuffle(buildDeck(extra), rng);
+    this.deck = shuffle(buildDeck(extra, { specials }), rng);
     this.discard = [];
     this.round = 0;
     this.dealer = dealer % this.players.length;
@@ -132,6 +135,7 @@ export class Match {
       discardTop: this.discard[this.discard.length - 1] || null,
       target: this.target,
       extra: this.extra,
+      specials: this.specials,
       winner: this.winner,
       players: this.players.map((p) => ({
         id: p.id, name: p.name, kind: p.kind, persona: p.persona, score: p.score,

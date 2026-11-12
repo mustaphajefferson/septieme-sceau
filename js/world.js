@@ -27,7 +27,7 @@ function mats() {
     eye: new THREE.MeshBasicMaterial({ color: 0xff6a20 }),
     eyePale: new THREE.MeshBasicMaterial({ color: 0xf0f0d8 }),
     black: new THREE.MeshBasicMaterial({ color: 0x000000 }),
-    bricks: S({ color: 0x6a6a5a, roughness: 1, map: TEX.bricks(), side: THREE.BackSide }),
+    bricks: S({ color: 0x8e8e7e, roughness: 1, map: TEX.bricks(), side: THREE.BackSide }),
     stone: S({ color: 0x5a5a50, roughness: 1, map: TEX.stone() }),
   });
   return M;
@@ -299,6 +299,17 @@ export function buildCrypt(scene) {
     const niche = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.4), new THREE.MeshBasicMaterial({ color: 0x000000 }));
     at(niche, ax * 1.01, 1.7, -1.2 + (az + 1.2) * 1.01); niche.lookAt(V3(0, 1.7, -1.2)); room.add(niche); walls.push(niche);
   }
+  // le fond de la salle éclairé en contre-plongée : piliers, arcs, rosace
+  const backS = new THREE.SpotLight(0xe8ecd8, 110, 14, 0.75, 0.7, 1.0); at(backS, 0, 0.6, -1.4); backS.target.position.set(0, 3.2, -6.2); room.add(backS, backS.target); walls.push(backS);
+  for (const sx of [-1, 1]) { const sl = new THREE.SpotLight(0xd8dcc8, 60, 12, 0.6, 0.8, 1.0); at(sl, sx * 1.2, 4.2, -1.6); sl.target.position.set(sx * 3.6, 1.6, -4.6); room.add(sl, sl.target); walls.push(sl); }
+  // torches sur les piliers du fond : la salle se devine
+  const torchFl = [];
+  for (const k of [1, 2, 8, 9]) {
+    const a = (k / 10) * Math.PI * 2, x = Math.sin(a) * 4.25, z = -1.2 - Math.cos(a) * 4.25;
+    const br = at(box(0.06, 0.4, 0.06, M.metalDark), x, 2.0, z); room.add(br); walls.push(br);
+    const f = makeFlame(3.2); at(f, x, 2.28, z); room.add(f); walls.push(f); torchFl.push(f);
+    const tl = new THREE.PointLight(0xfff0d8, 12, 6, 1.1); tl.position.set(x * 0.92, 2.3, -1.2 + (z + 1.2) * 0.92); room.add(tl); walls.push(tl);
+  }
   // rosace derrière le Fossoyeur
   const rose = makeRose(1.05); at(rose, 0, 2.15, -6.0); room.add(rose);
   const roseArch = ogive(2.6, 1.1, 0.4, 0.3, M.stone); at(roseArch, 0, 0, -6.1); room.add(roseArch); walls.push(rose, roseArch);
@@ -329,7 +340,8 @@ export function buildCrypt(scene) {
   }
   // lumière froide tombant d'une grille
   const spot = new THREE.SpotLight(0xd8e8c0, 40, 10, 0.5, 0.55, 1.0); at(spot, 0.3, 5, -1.1); spot.target.position.copy(TABLE.c); room.add(spot, spot.target);
-  const amb = new THREE.HemisphereLight(0x8aa070, 0x141410, 1.4); room.add(amb);
+  const amb = new THREE.HemisphereLight(0xa8b898, 0x1a1a14, 2.4); room.add(amb);
+  const back = new THREE.DirectionalLight(0xd8e0d0, 1.6); back.position.set(-2, 5, -8); room.add(back); // contre-jour : silhouettes
   const near = new THREE.PointLight(0xfff0d8, 1.8, 2.4, 1.0); at(near, 0.05, 1.35, -0.55); room.add(near);
   // poussière en suspension
   const n = 160, pos = new Float32Array(n * 3);
@@ -355,7 +367,10 @@ export function buildCrypt(scene) {
     gib.add(tube([[1.4, 4.05, 0], [1.42, 3.4, 0], [1.4, 2.9, 0]], 0.012, M.wood));
     const hung = at(new THREE.Group(), 1.4, 2.4, 0); gib.add(hung);
     hung.add(at(sph(0.12, M.cloth, 8, 6), 0, 0.5, 0)); hung.add(at(lathe([[0.04, 0.4], [0.18, 0.3], [0.2, -0.3], [0.24, -0.7], [0, -0.7]], M.clothDark, 8), 0, 0, 0));
-    zones.foret.userData.tick = (t) => { hung.rotation.y = Math.sin(t * 0.4) * 0.5; };
+    const moonS = new THREE.SpotLight(0xd8e8d0, 140, 20, 0.9, 0.7, 1); moonS.position.set(0.5, 7, -2.5); moonS.target.position.set(0, 1.5, -6.5); g.add(moonS, moonS.target);
+    const lant = new THREE.PointLight(0xffc070, 8, 5, 1.2); lant.position.set(-1.6, 2.3, -4.2); g.add(lant);
+    const lf = makeFlame(2.4); at(lf, -1.6, 2.2, -4.2); g.add(lf);
+    zones.foret.userData.tick = (t) => { hung.rotation.y = Math.sin(t * 0.4) * 0.5; lf.userData.flicker(t); };
   }
   { // le pont-levis : remparts, herse, chaînes, torches
     const g = new THREE.Group(); zones.pont = g; room.add(g);
@@ -405,14 +420,16 @@ export function buildCrypt(scene) {
     for (let i = 0; i < AN; i++) seed(i);
     for (const k in zones) zones[k].visible = k === z;
     for (const w of walls) w.visible = z !== 'foret';
-    scene.fog.color.set(z === 'foret' ? 0x0a0e0a : 0x000000);
-    scene.fog.near = z === 'foret' ? 2.5 : 3.2; scene.fog.far = z === 'foret' ? 9 : 10;
+    const fogC = { foret: 0x66745e, pont: 0x40444a, chateau: 0x302c26 }[z];
+    scene.fog.color.set(fogC); scene.background = new THREE.Color(fogC);
+    scene.fog.near = 2.6; scene.fog.far = z === 'foret' ? 12 : 11;
   };
   setZone('chateau');
   return {
     room, flames, spot, amb, setZone,
     tick(t) {
       flames.forEach((f) => f.userData.flicker(t));
+      torchFl.forEach((f) => f.userData.flicker(t));
       for (const k in zones) if (zones[k].visible) zones[k].userData.tick?.(t);
       tickAmb(t, Math.min(0.05, t - (this._lt ?? t))); this._lt = t;
       const p = dg.attributes.position;
@@ -669,17 +686,18 @@ export function buildFoe(kit = {}) {
   const root = new THREE.Group();
   const body = kit.body || 'armor';
   const fur = new THREE.MeshStandardMaterial({ color: 0x5a5448, flatShading: true, roughness: 1 });
-  const bm = { robe: M.clothDark, gambeson: M.cloth, tabard: M.metalDark, bare: M.flesh, armor: M.metalDark }[body] || M.clothDark;
+  const skin = new THREE.MeshStandardMaterial({ color: 0x5e5a48, flatShading: true, roughness: 0.9 });
+  const bm = { robe: M.clothDark, gambeson: M.cloth, tabard: M.metalDark, bare: skin, armor: M.metalDark }[body] || M.clothDark;
   const torso = lathe(body === 'robe' ? [[0, 0], [0.42, 0], [0.36, 0.35], [0.3, 0.7], [0.25, 0.95], [0.12, 1.05], [0, 1.08]] : [[0, 0], [0.38, 0], [0.4, 0.3], [0.36, 0.65], [0.3, 0.88], [0.12, 0.95], [0, 0.96]], bm, 12);
   at(torso, 0, 0.42, 0); root.add(torso); root.userData.torso = torso;
   if (body === 'gambeson') for (let k = 0; k < 6; k++) root.add(rx(at(new THREE.Mesh(new THREE.TorusGeometry(0.39 - k * 0.02, 0.012, 4, 18), M.wood), 0, 0.55 + k * 0.13, 0), Math.PI / 2));
   if (body === 'tabard') { const t = at(box(0.36, 0.85, 0.02, M.cloth), 0, 0.85, -0.37); root.add(t); t.add(at(box(0.22, 0.04, 0.03, M.black), 0, 0.12, -0.01)); t.add(at(box(0.04, 0.32, 0.03, M.black), 0, 0.05, -0.01)); }
-  if (body === 'bare') for (const [x, y] of [[-0.1, 1.1], [0.1, 1.1], [-0.07, 0.9], [0.07, 0.9]]) { const m = sph(0.09, M.flesh, 7, 5); m.scale.set(1, 0.7, 0.4); at(m, x, y, -0.3); root.add(m); }
+  if (body === 'bare') for (const [x, y] of [[-0.1, 1.1], [0.1, 1.1], [-0.07, 0.9], [0.07, 0.9]]) { const m = sph(0.09, skin, 7, 5); m.scale.set(1, 0.7, 0.4); at(m, x, y, -0.3); root.add(m); }
   if (body === 'armor' || body === 'tabard') for (const s of [-1, 1]) { const p = at(sph(0.17, kit.pauldrons === 'loup' ? fur : M.metal, 8, 6), s * 0.3, 1.26, 0); p.scale.set(1, 0.8, 1.1); root.add(p); }
   else if (kit.pauldrons === 'loup') for (const s of [-1, 1]) { const p = at(sph(0.18, fur, 7, 5), s * 0.28, 1.28, 0); p.scale.set(1.1, 0.7, 1); root.add(p); }
   if (kit.breast === 'soleil') { const sun = at(new THREE.Group(), 0, 1.05, -0.36); root.add(sun); sun.add(rx(cyl(0.07, 0.07, 0.02, M.bronze, 12), Math.PI / 2)); for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2, r = at(box(0.02, 0.07, 0.01, M.bronze), Math.cos(a) * 0.1, Math.sin(a) * 0.1, 0); r.rotation.z = a - Math.PI / 2; sun.add(r); } }
-  const armM = body === 'bare' ? M.flesh : body === 'armor' || body === 'tabard' ? M.metalDark : bm;
-  const handM = kit.hands === 'bony' ? M.bone : body === 'bare' ? M.flesh : M.metal;
+  const armM = body === 'bare' ? skin : body === 'armor' || body === 'tabard' ? M.metalDark : bm;
+  const handM = kit.hands === 'bony' ? M.bone : body === 'bare' ? skin : M.metal;
   for (const s of [-1, 1]) {
     root.add(tube([[s * 0.3, 1.22, 0], [s * 0.4, 0.98, -0.22], [s * 0.26, 0.87, -0.5]], body === 'bare' ? 0.06 : 0.05, armM));
     const hd = at(new THREE.Group(), s * 0.24, 0.86, -0.55); root.add(hd);
@@ -710,19 +728,20 @@ export function makeCreature(kind, variant = 0) {
 // forêt → pont-levis → château ; le pèlerin attend devant.
 export function buildExterior(scene) {
   mats();
-  scene.background = new THREE.Color(0x020202);
-  scene.fog = new THREE.Fog(0x020202, 14, 90);
+  scene.background = new THREE.Color(0x3a3c3a);
+  scene.fog = new THREE.Fog(0x3a3c3a, 9, 70);
   const g = new THREE.Group(); scene.add(g);
   const dark = new THREE.MeshStandardMaterial({ color: 0x3a3a34, roughness: 1, flatShading: true });
-  const pale = new THREE.MeshStandardMaterial({ color: 0xe0d8c8, roughness: 1, flatShading: true, emissive: 0x5a5850 });
+  const pale = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 1, flatShading: true, emissive: 0x24221e });
   const pineM = new THREE.MeshStandardMaterial({ color: 0x6a6a60, roughness: 1, flatShading: true, emissive: 0x1c1c1a });
   const win = new THREE.MeshBasicMaterial({ color: 0xffb050 });
   const skyTex = (() => { const c = document.createElement('canvas'); c.width = 4; c.height = 256; const x = c.getContext('2d');
-    const gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#000'); gr.addColorStop(0.45, '#2a2a2a'); gr.addColorStop(0.8, '#8a8880'); gr.addColorStop(1, '#b8b4a8');
+    const gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#0a0a0a'); gr.addColorStop(0.4, '#3a3c3a'); gr.addColorStop(0.75, '#9a9a90'); gr.addColorStop(1, '#d8d4c8');
     x.fillStyle = gr; x.fillRect(0, 0, 4, 256); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
   g.add(at(new THREE.Mesh(new THREE.PlaneGeometry(160, 60), new THREE.MeshBasicMaterial({ map: skyTex, fog: false })), 0, 24, -44));
   g.add(at(new THREE.Mesh(new THREE.CircleGeometry(2.2, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false })), 9, 17, -38));
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), M.stone); ground.rotation.x = -Math.PI / 2; g.add(ground);
+  const groundM = new THREE.MeshStandardMaterial({ color: 0x8a8a80, roughness: 1, map: M.stone.map });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), groundM); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; g.add(ground);
   const pine = (x, z, s) => { const t = new THREE.Group(); for (let j = 0; j < 5; j++) t.add(at(cone(0.95 * s * (1 - j * 0.16), 1.5 * s, pineM, 7), 0, 1 * s + j * 0.85 * s, 0)); t.add(at(cyl(0.08 * s, 0.13 * s, 1.4 * s, M.wood, 5), 0, 0.6 * s, 0)); return at(t, x, 0, z); };
   const Z = {}, ticks = {};
   { // forêt des pendus
@@ -736,6 +755,8 @@ export function buildExterior(scene) {
     for (let k = 0; k < 5; k++) { const c = at(new THREE.Group(), (k % 2 ? 1 : -1) * (1.6 + k * 0.4), 0, -7 - k * 2.5); c.add(at(box(0.08, 1.1, 0.08, M.wood), 0, 0.55, 0)); c.add(at(box(0.5, 0.08, 0.08, M.wood), 0, 0.8, 0)); c.rotation.z = (Math.random() - 0.5) * 0.4; f.add(c); }
     const mistM = new THREE.MeshBasicMaterial({ color: 0xd0d0c8, transparent: true, opacity: 0.4, depthWrite: false });
     const mists = []; for (let k = 0; k < 5; k++) { const m = at(new THREE.Mesh(new THREE.PlaneGeometry(50, 1.4), mistM), 0, 0.5 + k * 0.35, -8 - k * 4); mists.push(m); f.add(m); }
+    const fs = new THREE.SpotLight(0xe8f0e0, 220, 34, 0.55, 0.8, 1); fs.position.set(4, 12, -4); fs.target.position.set(-0.4, 3.5, -11); f.add(fs, fs.target);
+    const fs2 = new THREE.SpotLight(0xd8e8d0, 120, 44, 0.7, 0.9, 1); fs2.position.set(-6, 9, -2); fs2.target.position.set(0, 0, -18); f.add(fs2, fs2.target);
     ticks.foret = (t) => { hung.forEach((h, i) => { h.rotation.z = Math.sin(t * 0.6 + i) * 0.05; h.rotation.y = Math.sin(t * 0.3 + i) * 0.4; }); mists.forEach((m, i) => { m.position.x = Math.sin(t * 0.05 + i) * 3; }); };
   }
   { // pont-levis
@@ -751,7 +772,8 @@ export function buildExterior(scene) {
     for (const s of [-1, 1]) for (let k = 0; k < 22; k++) { const l = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 4, 8), M.metalDark); at(l, s * 1.75, 0.2 + k * 0.28, -9.4 - k * 0.28); l.rotation.y = k % 2 ? Math.PI / 2 : 0; p.add(l); }
     const water = new THREE.Mesh(new THREE.PlaneGeometry(40, 5), new THREE.MeshBasicMaterial({ color: 0x1a1a1a })); water.rotation.x = -Math.PI / 2; at(water, 0, 0.02, -12.5); p.add(water);
     const fl = []; for (const x of [-2.2, 2.2]) { const f = makeFlame(5); at(f, x, 3.2, -14.8); p.add(f); fl.push(f); }
-    const gl = new THREE.SpotLight(0xffe0b0, 40, 18, 0.6, 0.6, 1); at(gl, 0, 2.4, -15.6); gl.target.position.set(0, 0, -4); p.add(gl, gl.target);
+    const ws = new THREE.SpotLight(0xe0e4f0, 70, 40, 0.45, 0.8, 1); ws.position.set(-6, 10, -4); ws.target.position.set(0, 4, -16); p.add(ws, ws.target);
+    const gl = new THREE.SpotLight(0xffe0b0, 60, 18, 0.6, 0.6, 1); at(gl, 0, 2.4, -15.6); gl.target.position.set(0, 0, -4); p.add(gl, gl.target);
     ticks.pont = (t) => fl.forEach((f) => f.userData.flicker(t));
   }
   { // château du roi déchu
@@ -764,12 +786,17 @@ export function buildExterior(scene) {
     C.add(at(makeRose(1.3), 0, 11, 1.05));
     for (let k = 0; k < 8; k++) c.add(at(box(4 - k * 0.15, 0.25, 0.8, M.stone), 0, k * 0.25, -8 - k * 0.8));
     for (let k = 0; k < 40; k++) { const x = (Math.random() - 0.5) * 50, z = -4 - Math.random() * 30; if (Math.abs(x) < 9) continue; c.add(pine(x, z, 0.9 + Math.random())); }
+    const cs = new THREE.SpotLight(0xe8e4d8, 85, 60, 0.5, 1.0, 1); cs.position.set(5, 6, -6); cs.target.position.set(0, 9, -22); c.add(cs, cs.target);
     const crows = []; for (let k = 0; k < 6; k++) { const b = at(box(0.3, 0.02, 0.1, M.black), 0, 0, 0); crows.push(b); c.add(b); }
     ticks.chateau = (t) => crows.forEach((b, i) => { const a = t * 0.3 + i; b.position.set(Math.cos(a) * (5 + i), 22 + Math.sin(a * 2) * 1.5, -22 + Math.sin(a) * 4); b.scale.x = 1 + Math.sin(t * 8 + i) * 0.4; });
   }
-  scene.add(new THREE.HemisphereLight(0x9aa0b0, 0x1a1a1a, 2.2));
-  const moonL = new THREE.DirectionalLight(0xd8dcf0, 3.4); moonL.position.set(6, 12, 8); scene.add(moonL);
-  const back = new THREE.DirectionalLight(0xc8ccd8, 1.2); back.position.set(-4, 6, -20); scene.add(back);
+  scene.add(new THREE.HemisphereLight(0xc8ccd0, 0x2a2a26, 2.6));
+  const moonL = new THREE.DirectionalLight(0xe8ecf8, 3.2); moonL.position.set(6, 12, 8); scene.add(moonL);
+  const back = new THREE.DirectionalLight(0xd8dce8, 2.2); back.position.set(-4, 8, -30); scene.add(back);
+  // la lanterne du pèlerin : un halo chaud au premier plan
+  const lan = new THREE.PointLight(0xffd8a0, 12, 7, 1.2); lan.position.set(0.6, 1.4, -5.0); g.add(lan);
+  const lanF = makeFlame(2.5); at(lanF, 0.55, 1.0, -5.25); g.add(lanF);
+  const lanBox = at(box(0.12, 0.18, 0.12, M.metalDark), 0.55, 1.0, -5.25); g.add(lanBox);
   const pilgrim = makeStandingPilgrim(0); at(pilgrim, 0.1, 0, -5.5); pilgrim.rotation.y = 0.3; g.add(pilgrim);
   let zone = 'foret';
   const setZone = (z) => { zone = z; for (const k in Z) Z[k].visible = k === z; };

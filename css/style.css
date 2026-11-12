@@ -483,3 +483,5 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 22px; background: var
   .two { gap: 12px; }
   .deck-tip { font-size: 16px; }
 }
+
+#sframe { display: none !important; }

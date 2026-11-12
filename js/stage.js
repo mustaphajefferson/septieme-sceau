@@ -90,10 +90,10 @@ export class Stage {
       cr.root.lookAt(V3(TABLE.c.x, 0, TABLE.c.z)); cr.root.rotateY(Math.PI);
       cr.root.traverse((o) => { o.userData.pid = p.id; });
       this.scene.add(cr.root);
-      const fl = new THREE.PointLight(0xe8e8d0, 9, 2.8, 1.0);
+      const fl = new THREE.PointLight(0xe8e8d0, 6, 2.8, 1.0);
       fl.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.2))); fl.position.y = 1.35;
       this.scene.add(fl); cr.root.userData.fill = fl;
-      const face = new THREE.SpotLight(0xfff0d8, 45, 5, 0.45, 0.5, 1.0);
+      const face = new THREE.SpotLight(0xfff0d8, 16, 5, 0.45, 0.5, 1.0);
       face.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.6))); face.position.y = 1.15;
       face.target.position.copy(sp).setY(1.6); this.scene.add(face, face.target); fl.userData.face = face;
       const rimL = new THREE.SpotLight(0xd8e8c0, 30, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;

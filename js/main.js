@@ -42,6 +42,8 @@ const done = () => save.node >= 12;
 const zoneIdx = (n) => Math.min(2, Math.floor(Math.min(n, 11) / 4));
 const zoneOf = (n) => ZONES[zoneIdx(n)];
 const PAL = { foret: 'fange', pont: 'rouille', chateau: 'velin' };
+// plusieurs decks viendront ; pour l'instant, celui du pèlerin (rangs 0 à 12, sans cartes spéciales)
+const DECKS = [{ id: 'pelerin', name: 'Le deck du pèlerin' }];
 
 // ── icônes & curseur ─────────────────────────────────────────
 const fillIcons = (root = document) => $$('[data-icon]', root).forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -66,7 +68,7 @@ const ext = buildExterior(extScene);
 const extCam = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
 const SHOTS = {
   title: { pos: [0.4, 1.6, 5.5], look: [0, 4.2, -12], fov: 55 },
-  menu: { pos: [-1.4, 1.45, -1.4], look: [-0.2, 2.2, -12], fov: 50 },
+  menu: { pos: [-1.0, 1.9, 2.2], look: [0, 3.4, -14], fov: 56 },
 };
 let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
 let shotFrom = null, shotTo = null, shotK = 1;
@@ -186,17 +188,14 @@ $$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play(
 function openDeck() {
   const st = play.stage, z = zoneOf(save.node);
   st.setPlayers([{ id: 'you', name: 'Pèlerin', kind: 'human' }], 'you');
-  st.setDealer(null); st.crypt.setZone(z.place); st.setDeckCount(94 + save.relics.length);
+  st.setDealer(null); st.crypt.setZone(z.place);
   const list = [];
   for (let v = 0; v <= 12; v++) {
     const open = v === 0 || save.ranks.includes(v);
     list.push({ card: { t: 'n', v, id: 'g' + v }, locked: !open, row: v < 7 ? 0 : 1, col: v < 7 ? v : v - 7, per: v < 7 ? 7 : 6, tip: open ? `Rang ${v} · ${RANK_NAMES[v].toLowerCase()} · ${Math.max(1, v)} dans l'Ossuaire` + (v ? ' · ' + FOES[v - 1].name : '') : `Rang ${v} · bats ${FOES[v - 1].name.toLowerCase()} pour lui donner un visage` });
   }
-  const counts = {}; for (const id of save.relics) counts[id] = (counts[id] || 0) + 1;
-  const ids = Object.keys(counts);
-  ids.forEach((id, k) => list.push({ card: relicCard(id), row: 2, col: k, per: Math.max(ids.length, 1), tip: `${RELICS[id].name}${counts[id] > 1 ? ' ×' + counts[id] : ''} · relique : brûle si l'adversaire la tire` }));
   st.deckMode(list); st.setDeckCount(0);
-  $('#deck-count').textContent = `${94 + save.relics.length} âmes · ${save.ranks.length} visage${save.ranks.length > 1 ? 's' : ''} · ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}`;
+  $('#deck-count').textContent = `${DECKS[0].name} · 79 âmes · ${save.ranks.length} / 12 visages`;
   $('#deck-tip').textContent = '';
   dr.setPalette(PAL[z.place]);
   show('deck');
@@ -224,7 +223,7 @@ async function startDuel(n) {
   const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
   const players = [{ id: 'you', name: 'Pèlerin', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', persona: 'f' + n, score: oppStart }];
   const controllers = { you: { decide: () => play.askDecision(), chooseTarget: (s, pid, kind, c) => play.askTarget(kind, c) }, foe: makeAI(null, { risk: foe.risk }) };
-  const match = new Match({ players, controllers, target, dealer: 1, extra: save.relics.map(relicCard), presenter: async (ev, snap) => { while (paused) await wait(120); await play.present(ev, snap); } });
+  const match = new Match({ players, controllers, target, dealer: 1, extra: [], specials: false, presenter: async (ev, snap) => { while (paused) await wait(120); await play.present(ev, snap); } });
   session = { match, n };
   play.showRisk = true; play.stage.speed = 1; play.gate = true;
   setPause(false);
@@ -282,22 +281,11 @@ function victory(n, score) {
   $('#sp-card').src = faceURL({ t: 'n', v: n + 1 }); $('#sp-back').src = backURL();
   const flip = $('.flip'); flip.classList.remove('up');
   const sp = $('#spoils'); sp.classList.remove('picking');
-  const row = $('#sp-relics'); row.innerHTML = '';
-  let taken = false;
-  for (const id of offer(n)) {
-    const b = document.createElement('button');
-    b.innerHTML = `<img alt="" src="${faceURL(relicCard(id))}"><span>${esc(RELICS[id].name)}</span>`;
-    b.onclick = () => {
-      if (taken) return; taken = true;
-      save.relics.push(id); persist();
-      b.classList.add('taken'); sound.play('gain');
-      setTimeout(openMenu, 900);
-    };
-    row.appendChild(b);
-  }
+  $('#sp-relics').innerHTML = '<button class="gbtn small" id="sp-go"><span>Continuer</span></button>';
+  $('#sp-go').onclick = () => { sound.play('click'); openMenu(); };
   show('spoils');
   setTimeout(() => { flip.classList.add('up'); sound.play('flip'); }, 900);
-  setTimeout(() => { sp.classList.add('picking'); sound.play('whoosh'); }, 2400);
+  setTimeout(() => sp.classList.add('picking'), 1900);
 }
 
 // ── LA MORT ──────────────────────────────────────────────────
@@ -307,7 +295,7 @@ function defeat(n) {
   sound.stopMusic();
   $('#dt-zone').textContent = ZONES[z].name;
   $('#dt-img').src = portrait(dr, 'f' + n, { palette: 'sang', w: 200, h: 230 });
-  $('#dt-lead').textContent = `${FOES[n].name} a gagné ta mise. Les âmes que tu portais t'ont repris. Tu renais à l'orée : ${ZONES[z].name}. Tes visages et tes reliques te suivent.`;
+  $('#dt-lead').textContent = `${FOES[n].name} a gagné ta mise. Les âmes que tu portais t'ont repris. Tu renais à l'orée : ${ZONES[z].name}. Les visages gagnés te suivent.`;
   show('death');
 }
 $('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); openMenu(); };
