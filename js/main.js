@@ -3,7 +3,7 @@
 //  Accueil (le lieu du prochain duel) → le seuil → la route,
 //  le deck, le guide → la table → le butin (ou la mort).
 // ─────────────────────────────────────────────────────────────
-import { THREE, DitherRenderer } from './render.js';
+import { THREE, DitherRenderer, PALETTES } from './render.js';
 import { buildExterior } from './world.js';
 import { installFrameVars, drawScreenFrame } from './frames.js';
 import { portrait, portraitCanvas } from './gallery.js';
@@ -13,7 +13,8 @@ import { Match, RANK_NAMES } from './game.js';
 import { makeAI } from './ai.js';
 import { icon } from './icons.js';
 import { BESTIAIRE, PACTE } from './lore.js';
-import { ZONES, FOES, PALIERS, RELICS, relicCard, offer } from './content.js';
+import { ZONES, FOES, PALIERS, offer, ILLUS } from './content.js';
+import { loadDots, dotsToCanvas, Veil, Thorn, Figure } from './dots.js';
 import { setRankArt, faceURL, backURL, clearFaces } from './cardtex.js';
 import { wait } from './fx.js';
 import { setHandArt } from './handview.js';
@@ -55,14 +56,29 @@ fillIcons();
 }
 
 // ── rendu ────────────────────────────────────────────────────
-let current = 'title';
+let current = 'title', current0 = '';
 const canvas = $('#gl');
 const dr = new DitherRenderer(canvas, { pixel: (w, h) => Math.max(2, Math.min(w, h) / 250), palette: 'fange' });
 const play = new Play(dr);
-const art = (i, w = 96, h = 112) => portrait(dr, 'f' + i, { palette: 'velin', w, h });
-setRankArt(Object.assign((v) => (v >= 1 && save.ranks.includes(v) ? portraitCanvas(dr, 'f' + (v - 1), { palette: 'velin', w: 148, h: 150 }) : null), { label: (v) => FOES[v - 1]?.name || '' }));
-
-setHandArt((v) => (v >= 1 && save.ranks.includes(v) ? { url: portrait(dr, 'f' + (v - 1), { palette: 'velin', w: 148, h: 150 }), name: FOES[v - 1].name } : null));
+// ── illustrations en points ─────────────────────────────────
+const veil = new Veil($('#veil')); play.veil = veil;
+const illus = {};      // nom → points du dessin
+const figures = {};    // nom → personnage animé
+let thorns = [], thornSrc = null;
+const foeCache = new Map();
+// portrait d'un adversaire : son dessin s'il en a un, sinon le rendu de sa créature
+function foeCanvas(i, w, h, palette = 'velin') {
+  const k = [i, w, h, palette].join('|');
+  if (!foeCache.has(k)) {
+    const f = FOES[i], P = PALETTES[palette];
+    foeCache.set(k, f.art && illus[f.art] ? dotsToCanvas(illus[f.art], ILLUS[f.art].bust, w, h, P.ramp[0], P.ramp[4]) : portraitCanvas(dr, 'f' + i, { palette, w, h }));
+  }
+  return foeCache.get(k);
+}
+setRankArt(Object.assign((v) => (v >= 1 && save.ranks.includes(v) ? foeCanvas(v - 1, 148, 150) : null), { label: (v) => FOES[v - 1]?.name || '' }));
+setHandArt((v) => (v >= 1 && save.ranks.includes(v) ? { url: foeCanvas(v - 1, 148, 150).toDataURL(), name: FOES[v - 1].name } : null));
+const mouse = { x: 0, y: 0, sx: 0, sy: 0 };
+addEventListener('pointermove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
 const extScene = new THREE.Scene();
 const ext = buildExterior(extScene);
 const extCam = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
@@ -95,15 +111,25 @@ function placeGL() {
   extCam.aspect = r.width / r.height; extCam.updateProjectionMatrix();
 }
 addEventListener('resize', placeGL);
+addEventListener('resize', () => { veil.resize(); for (const f of Object.values(figures)) f.setup(); buildThorns(); });
+function buildThorns() {
+  if (!thornSrc) return;
+  thorns = [new Thorn($('#m-go'), thornSrc), new Thorn($('#m-deck'), thornSrc)];
+}
+let palSync = '';
 
 let last = performance.now(), ct = 0;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (document.hidden) return;
+  if (dr.paletteName !== palSync) { palSync = dr.paletteName; const P = PALETTES[palSync] || PALETTES.fange; veil.setPalette(P); thorns.forEach((b) => b.setPalette(P)); }
+  veil.frame(now / 1000, dt);
+  if (current === 'menu') thorns.forEach((b) => b.frame(now / 1000, dt));
   if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
   if (current === 'deck') { play.stage.update(dt); play.stage.render(); return; }
   ct += dt;
+  mouse.sx += (mouse.x - mouse.sx) * Math.min(1, dt * 4); mouse.sy += (mouse.y - mouse.sy) * Math.min(1, dt * 4);
   ext.tick(ct);
   if (shotTo) {
     shotK = Math.min(1, shotK + dt / shotTo.dur);
@@ -111,8 +137,8 @@ function loop(now) {
     shot.pos.lerpVectors(shotFrom.pos, shotTo.pos, k); shot.look.lerpVectors(shotFrom.look, shotTo.look, k); shot.fov = shotFrom.fov + (shotTo.fov - shotFrom.fov) * k;
     if (shotK >= 1) shotTo = null;
   }
-  extCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15, Math.sin(ct * 0.21) * 0.05, 0));
-  extCam.fov = shot.fov; extCam.updateProjectionMatrix(); extCam.lookAt(shot.look);
+  extCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15 + mouse.sx * 0.35, Math.sin(ct * 0.21) * 0.05 + mouse.sy * 0.12, 0));
+  extCam.fov = shot.fov; extCam.updateProjectionMatrix(); extCam.lookAt(shot.look.x + mouse.sx * 2.6, shot.look.y + mouse.sy * 1.2, shot.look.z);
   dr.render(extScene, extCam);
 }
 
@@ -124,6 +150,9 @@ function show(id) {
   if (id !== 'game') dr.setPalette(PAL[zoneOf(save.node).place]);
   document.body.classList.toggle('ondeck', id === 'deck');
   if (id !== 'deck') play.stage.clearDeck();
+  if (id !== 'game') { play.figPid = null; play.fig?.hide(); }
+  if (id === 'menu') thorns.forEach((b, i) => b.reveal(current0 === 'title' ? 1300 + i * 260 : 150 + i * 160));
+  current0 = id;
   ext.showPilgrim(id !== 'title');
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
   requestAnimationFrame(placeGL);
@@ -135,6 +164,18 @@ document.addEventListener('pointerover', (e) => {
   if (b && !b.disabled && b !== document._h) { document._h = b; sound.play('hover'); }
 });
 const updateSound = () => { const b = $('[data-p=sound] b'); if (b) b.textContent = sound.muted ? 'coupé' : 'actif'; };
+
+// ── transitions : le voile tramé se referme, la page change, il se rouvre ──
+let busy = false;
+async function go(fn, type = 'iris') {
+  if (busy) return; busy = true;
+  sound.play('whoosh');
+  await veil.close(type);
+  await fn();
+  await wait(140);
+  busy = false;
+  veil.open();
+}
 
 // ── carte agrandie (inspection) ─────────────────────────────
 function inspect(url) {
@@ -155,9 +196,18 @@ async function boot() {
   show('title');
   requestAnimationFrame(loop);
   await document.fonts.ready;
-  await Promise.all(['27px Bastarda', '60px Jacquard', '700 30px Grenze', '500 20px Grenze', '11px JBM'].map((f) => document.fonts.load(f).catch(() => {})));
+  const [fr, th] = await Promise.all([loadDots('art/cadre-racines.png'), loadDots('art/cadre-bouton.png'),
+    ...Object.entries(ILLUS).map(([k, m]) => loadDots(m.url).then((d) => { illus[k] = d; })),
+    ...['27px Bastarda', '60px Jacquard', '700 30px Grenze', '500 20px Grenze', '11px JBM'].map((f) => document.fonts.load(f).catch(() => {}))]);
+  veil.setSource(fr); thornSrc = th; buildThorns();
   clearFaces();
   placeGL();
+  // les racines poussent depuis les coins, puis la nuit s'ouvre sur le lieu
+  veil.growIn(2800);
+  await wait(700);
+  veil.open(1700);
+  $('#title').classList.add('in');
+  await wait(1900);
   const b = $('#enter');
   b.disabled = false; b.textContent = 'Appuie sur une touche';
   const go = () => { removeEventListener('keydown', go); b.removeEventListener('click', go); enter(); };
@@ -169,6 +219,7 @@ async function enter() {
   sound.play('enter');
   sound.startMusic('menu');
   updateSound();
+  veil.stir = 3; veil.tween('stir', 0, 2400);
   openMenu();
 }
 
@@ -181,8 +232,8 @@ function openMenu() {
   show('menu');
 }
 $('#m-go').onclick = () => { sound.play('click'); startDuel(done() ? 11 : save.node); };
-$('#m-deck').onclick = () => { sound.play('click'); openDeck(); };
-$$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); openMenu(); }));
+$('#m-deck').onclick = () => { sound.play('click'); go(openDeck); };
+$$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); go(openMenu); }));
 
 // ── LE DECK : étalé sur la table du lieu ─────────────────────
 function openDeck() {
@@ -194,7 +245,7 @@ function openDeck() {
     const open = v === 0 || save.ranks.includes(v);
     list.push({ card: { t: 'n', v, id: 'g' + v }, locked: !open, row: v < 7 ? 0 : 1, col: v < 7 ? v : v - 7, per: v < 7 ? 7 : 6, tip: open ? `Rang ${v} · ${RANK_NAMES[v].toLowerCase()} · ${Math.max(1, v)} dans l'Ossuaire` + (v ? ' · ' + FOES[v - 1].name : '') : `Rang ${v} · bats ${FOES[v - 1].name.toLowerCase()} pour lui donner un visage` });
   }
-  st.deckMode(list); st.setDeckCount(0);
+  st.deckMode(list, (k) => { if (k % 2 === 0) sound.play('flip'); }); st.setDeckCount(0);
   $('#deck-count').textContent = `${DECKS[0].name} · 79 âmes · ${save.ranks.length} / 12 visages`;
   $('#deck-tip').textContent = '';
   dr.setPalette(PAL[z.place]);
@@ -218,6 +269,9 @@ play.onInspect = (card) => inspect(faceURL(card));
 // ── LE DUEL ──────────────────────────────────────────────────
 let session = null;
 async function startDuel(n) {
+  if (busy) return; busy = true;
+  sound.play('whoosh');
+  await veil.close('iris');
   const z = Math.floor(n / 4), j = n % 4, zone = ZONES[z];
   const foe = FOES[n], target = PALIERS[j];
   const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
@@ -227,7 +281,16 @@ async function startDuel(n) {
   session = { match, n };
   play.showRisk = true; play.stage.speed = 1; play.gate = true;
   setPause(false);
-  play.onGameOver = (ev) => { if (session?.match !== match) return; session = null; if (ev.winner === 'you') victory(n, match.players.find((p) => p.id === 'you').score); else defeat(n); };
+  play.onGameOver = async (ev) => {
+    if (session?.match !== match) return; session = null;
+    const won = ev.winner === 'you', fig = play.figPid ? play.fig : null;
+    busy = true;
+    if (fig) { if (won) { sound.play('reshuffle'); await fig.collapse(); } else { fig.stare(1); fig.look(1); fig.jolt(0.7); await wait(1100); } }
+    await veil.close(won ? 'up' : 'down', 700);
+    if (won) victory(n, match.players.find((p) => p.id === 'you').score); else defeat(n);
+    await wait(160);
+    busy = false; veil.open(800);
+  };
   play.stage.crypt.setZone(zone.place);
   play.stage.setDealer(j < 3 ? 'f' + (z * 4 + 3) : null);
   show('game');
@@ -235,15 +298,26 @@ async function startDuel(n) {
   play.mount(match.snapshot(), 'you');
   $('#g-target').textContent = target;
   sound.stopMusic(); sound.startMusic('table');
+  // l'adversaire dessiné se rassemble, point par point, de l'autre côté de la table
+  let fig = null;
+  if (foe.art && illus[foe.art]) {
+    fig = figures[foe.art] ||= new Figure($('#ill'), illus[foe.art], ILLUS[foe.art]);
+    fig.reset(); play.fig = fig; play.figPid = 'foe';
+  }
+  await wait(260);
+  busy = false;
+  veil.open(800);
+  await wait(350);
+  if (fig) { sound.play('reshuffle'); fig.appear(2000); await wait(1500); }
   play.banner(foe.name);
+  await wait(500);
+  if (session?.match !== match) return;
   try { await match.run(); } catch (e) { if (e?.message !== 'aborted') console.error(e); }
 }
 function leave() {
   if (session) { session.match.aborted = true; play.cancelPrompts(); }
   session = null;
-  play.closeOverlay();
-  sound.stopMusic(); sound.startMusic('menu');
-  openMenu();
+  go(() => { play.closeOverlay(); sound.stopMusic(); sound.startMusic('menu'); openMenu(); });
 }
 let paused = false;
 function setPause(v) {
@@ -282,7 +356,7 @@ function victory(n, score) {
   const flip = $('.flip'); flip.classList.remove('up');
   const sp = $('#spoils'); sp.classList.remove('picking');
   $('#sp-relics').innerHTML = '<button class="gbtn small" id="sp-go"><span>Continuer</span></button>';
-  $('#sp-go').onclick = () => { sound.play('click'); openMenu(); };
+  $('#sp-go').onclick = () => { sound.play('click'); go(openMenu); };
   show('spoils');
   setTimeout(() => { flip.classList.add('up'); sound.play('flip'); }, 900);
   setTimeout(() => sp.classList.add('picking'), 1900);
@@ -294,16 +368,16 @@ function defeat(n) {
   if (!done()) { save.node = z * 4; save.score = 0; persist(); }
   sound.stopMusic();
   $('#dt-zone').textContent = ZONES[z].name;
-  $('#dt-img').src = portrait(dr, 'f' + n, { palette: 'sang', w: 200, h: 230 });
+  $('#dt-img').src = foeCanvas(n, 200, 230, 'sang').toDataURL();
   $('#dt-lead').textContent = `${FOES[n].name} a gagné ta mise. Les âmes que tu portais t'ont repris. Tu renais à l'orée : ${ZONES[z].name}. Les visages gagnés te suivent.`;
   show('death');
 }
-$('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); openMenu(); };
+$('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); go(openMenu); };
 
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('#cardview').classList.contains('hidden')) { $('#cardview').classList.add('hidden'); return; }
   if (current === 'game' && session) setPause(!paused);
 });
-window.__vii = { get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause };
+window.__vii = { veil, play, figures, go, get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause };
 boot();

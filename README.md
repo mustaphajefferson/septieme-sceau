@@ -20,3 +20,7 @@ js/render.js   tramage en palette
 js/main.js     écrans et progression · js/game.js règles · js/ai.js adversaires
 ```
 Lancer en local : `python3 -m http.server 8000`
+
+## Illustrations en points (`art/`)
+Les dessins tramés 1 bit sont lus point par point et animés (`js/dots.js`) : le cadre de racines (tous les écrans + transitions), le cadre d'épines des boutons, et les personnages dessinés assis à la table.
+Format : PNG en niveaux de gris — 255 = point, 128 = fond plein derrière le dessin, 0 = vide. Pour un personnage, ajouter son entrée dans `ILLUS` (`js/content.js`) et `art: 'nom'` sur l'adversaire.

@@ -329,7 +329,7 @@ export function buildCrypt(scene) {
   const skull = makeSkull(1.1); at(skull, -0.42, TABLE.c.y + 0.06, -0.92); skull.rotation.y = 0.6; room.add(skull);
   for (let k = 0; k < 3; k++) { const b = at(cyl(0.008, 0.01, 0.16, M.bone, 5), 0.55 + k * 0.03, TABLE.c.y + 0.01, -1.0 + k * 0.05); b.rotation.z = Math.PI / 2; b.rotation.y = k * 0.7; room.add(b); }
   const flames = [];
-  [[-0.62, -1.2, 0.2], [0.6, -1.5, 0.16], [0.12, -0.78, 0.09], [-0.3, -1.85, 0.24]].forEach(([x, z, h], i) => {
+  [[-0.66, -1.2, 0.2], [0.72, -1.5, 0.16], [0.12, -0.78, 0.09], [-0.9, -1.7, 0.24]].forEach(([x, z, h], i) => {
     const c = makeCandle(h, 0.024, i !== 2); at(c, x, TABLE.c.y, z); room.add(c); flames.push(c.userData.flame);
   });
   // grand candélabre derrière (contre-jour)
@@ -420,7 +420,8 @@ export function buildCrypt(scene) {
     for (let i = 0; i < AN; i++) seed(i);
     for (const k in zones) zones[k].visible = k === z;
     for (const w of walls) w.visible = z !== 'foret';
-    const fogC = { foret: 0x66745e, pont: 0x40444a, chateau: 0x302c26 }[z];
+    const fogC = { foret: 0x8c9c82, pont: 0x565c64, chateau: 0x3c3830 }[z];
+    amb.intensity = z === 'foret' ? 3.4 : 2.4;
     scene.fog.color.set(fogC); scene.background = new THREE.Color(fogC);
     scene.fog.near = 2.6; scene.fog.far = z === 'foret' ? 12 : 11;
   };
@@ -720,7 +721,14 @@ export function buildFoe(kit = {}) {
 
 export function makeCreature(kind, variant = 0) {
   if (kind === 'pelerin') return CREATURES.pelerin(variant);
-  if (/^f\d+$/.test(kind)) return buildFoe(FOES[+kind.slice(1)].kit);
+  if (/^f\d+$/.test(kind)) {
+    const f = FOES[+kind.slice(1)];
+    if (f.art) { // dessiné en points par-dessus la scène : ici, un simple repère
+      const root = new THREE.Group(), head = new THREE.Object3D(); head.position.set(0, 1.62, 0); root.add(head); root.userData.illus = f.art;
+      return { root, head, update() {} };
+    }
+    return buildFoe(f.kit);
+  }
   return CREATURES[kind]();
 }
 

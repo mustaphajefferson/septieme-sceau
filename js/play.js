@@ -10,6 +10,7 @@ import { portrait } from './gallery.js';
 import { BESTIAIRE } from './lore.js';
 import { wait } from './fx.js';
 import { HandView } from './handview.js';
+import { PALETTES } from './render.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const STATUS_ICON = { stayed: 'fist', frozen: 'frost', bust: 'skull' };
@@ -154,6 +155,7 @@ export class Play {
   frame(dt) {
     this.stage.update(dt);
     this.stage.render();
+    if (this.fig && this.figPid) { const g = this.stage.figGeom(this.figPid); if (g) this.fig.render(this.stage.t, dt, g, PALETTES[this.dr.paletteName] || PALETTES.fange); }
     const r = this.canvas.getBoundingClientRect();
     for (const pl of document.querySelectorAll('#plates .plate')) {
       const s = this.stage.screenOf(pl.dataset.pid, r.width, r.height);
@@ -184,6 +186,15 @@ export class Play {
   // ── événements ─────────────────────────────────────────────
   async present(ev, snap) {
     const st = this.stage;
+    const fig = this.figPid ? this.fig : null, foeEv = ev.pid && ev.pid === this.figPid;
+    if (fig) switch (ev.type) { // le dessin vit : il tend la main, sursaute, te fixe
+      case 'roundStart': fig.look(0); fig.stare(0.3); break;
+      case 'turn': fig.look(foeEv ? -0.5 : 0.7); fig.stare(foeEv ? 0.25 : 0.85); break;
+      case 'reveal': if (foeEv) fig.reach(); break;
+      case 'bust': if (foeEv) { fig.jolt(1.4); fig.stare(0); } else { fig.jolt(0.3); fig.stare(1); fig.look(1); } this.veil?.shake(1.6); break;
+      case 'stay': if (foeEv) { fig.look(1); fig.reach(300); } break;
+      case 'flip7': fig.jolt(foeEv ? 0.5 : 0.9); this.veil?.shake(1); break;
+    } else if (ev.type === 'bust') this.veil?.shake(1.6);
     switch (ev.type) {
       case 'gameStart':
         this.sync(snap);

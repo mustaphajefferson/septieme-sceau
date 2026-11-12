@@ -74,7 +74,7 @@ export class Stage {
     this.seats.clear();
     for (const m of this.cards.values()) this.scene.remove(m);
     this.cards.clear();
-    this.you = you;
+    this.you = you; this.lookBase.y = 0.98;
     const idx = players.findIndex((p) => p.id === you);
     const others = [...players.slice(idx + 1), ...players.slice(0, Math.max(idx, 0))];
     const n = others.length;
@@ -90,6 +90,7 @@ export class Stage {
       cr.root.lookAt(V3(TABLE.c.x, 0, TABLE.c.z)); cr.root.rotateY(Math.PI);
       cr.root.traverse((o) => { o.userData.pid = p.id; });
       this.scene.add(cr.root);
+      if (cr.root.userData.illus) { this.lookBase.y = 1.1; this.seats.set(p.id, { pid: p.id, a, d, creature: cr, base: sp.clone(), kind, illus: cr.root.userData.illus }); return; }
       const fl = new THREE.PointLight(0xe8e8d0, 6, 2.8, 1.0);
       fl.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.2))); fl.position.y = 1.35;
       this.scene.add(fl); cr.root.userData.fill = fl;
@@ -319,8 +320,26 @@ export class Stage {
     return m;
   }
 
+  // ── repères écran pour un personnage dessiné : ancrage + bord de table ──
+  figGeom(pid) {
+    const s = this.seats.get(pid); if (!s) return null;
+    const r = this.dr.canvas.getBoundingClientRect();
+    this.camera.updateMatrixWorld();
+    const P = (v) => { v.project(this.camera); return [r.left + (v.x * 0.5 + 0.5) * r.width, r.top + (-v.y * 0.5 + 0.5) * r.height]; };
+    const [x, y] = P(TABLE.c.clone().add(s.d.clone().multiplyScalar(TABLE.r + 0.3)).setY(TABLE.c.y - 0.075));
+    const xs = [], ys = [];
+    for (let i = 0; i <= 48; i++) { const a = s.a - 1.5 + (i / 48) * 3, p = P(V3(TABLE.c.x + Math.sin(a) * (TABLE.r + 0.04), TABLE.c.y + 0.012, TABLE.c.z - Math.cos(a) * (TABLE.r + 0.04))); xs.push(p[0]); ys.push(p[1]); }
+    const rim = (px) => {
+      if (px <= xs[0] || px >= xs[48]) return 1e6;
+      let i = 1; while (xs[i] < px) i++;
+      const k = (px - xs[i - 1]) / (xs[i] - xs[i - 1] || 1);
+      return ys[i - 1] + (ys[i] - ys[i - 1]) * k;
+    };
+    return { x, y, rim };
+  }
+
   // ── le deck étalé sur la table ─────────────────────────────
-  deckMode(list) {
+  deckMode(list, onCard) {
     this.clearDeck();
     this.R.visible = this.L.visible = false;
     const tall = this.camera.aspect < 1;
@@ -338,9 +357,12 @@ export class Stage {
       const k = this.deckCards.length;
       const m = makeCardMesh(it.locked ? backTex() : faceTex(it.card), backTex());
       const x = (c - (row.length - 1) / 2) * gw, z = z0 + r * gh + (it.card.relic && !tall ? 0.04 : 0);
-      m.position.set(x, TABLE.c.y + 0.004, z); m.scale.setScalar(sc);
-      m.quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2, Math.sin(k * 7.3) * 0.05, 0, 'YXZ'));
-      m.userData = { ...m.userData, deck: it, base: m.position.clone() };
+      // chaque carte part du paquet, face cachée, et vient se poser à sa place
+      const pos = V3(x, TABLE.c.y + 0.004, z), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, Math.sin(k * 7.3) * 0.05, 0, 'YXZ'));
+      m.position.set(0, TABLE.c.y + 0.01 + k * 0.0012, z0 + rows.length * gh + 0.02); m.scale.setScalar(sc);
+      m.quaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+      m.userData = { ...m.userData, deck: it, base: pos, anim: true };
+      this.wait(350 + k * 70).then(() => { if (!this.deckCards.includes(m)) return; onCard?.(k); return this.moveCard(m, pos, q, 460, { arc: 0.16 }); });
       if (it.locked) m.material.forEach((mt) => mt.color?.setScalar?.(0.45));
       this.scene.add(m); this.deckCards.push(m);
     }));
@@ -375,14 +397,14 @@ export class Stage {
     m.position.copy(this.deckTop());
     m.quaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
     this.setDeckCount(this.deckCount - 1);
-    const mid = TABLE.c.clone().add(s.d.clone().multiplyScalar(0.45)); mid.y = TABLE.c.y + 0.32;
+    const mid = TABLE.c.clone().add(s.d.clone().multiplyScalar(s.illus ? -0.25 : 0.45)); mid.y = TABLE.c.y + (s.illus ? 0.14 : 0.32);
     const v = this.viewPose();
     const qFace = v.front.clone();
     m.userData.anim = true;
     const p0 = m.position.clone(), q0 = m.quaternion.clone();
     if (s.creature) this.lean(s, 1);
     await this.tween(460, (k) => { m.position.lerpVectors(p0, mid, k); m.position.y += Math.sin(k * Math.PI) * 0.1; m.quaternion.slerpQuaternions(q0, qFace, ease.out(k)); });
-    m.scale.setScalar(1.6);
+    m.scale.setScalar(s.illus ? 1.45 : 1.6);
     m.material[4].emissive.setHex(0xd0d0d0);
     m.userData.anim = false;
     return m;
@@ -493,7 +515,8 @@ export class Stage {
   screenOf(pid, w, h) {
     const s = this.seats.get(pid);
     if (!s?.creature) return null;
-    const p = s.creature.head.getWorldPosition(new THREE.Vector3()).add(V3(0, 0.3, 0)).project(this.camera);
+    // un personnage dessiné garde sa plaque sur le côté, au ras de la table
+    const p = (s.illus ? TABLE.c.clone().add(s.d.clone().multiplyScalar(TABLE.r - 0.05)).add(V3(s.d.z, 0, -s.d.x).multiplyScalar(-0.95)).setY(TABLE.c.y + 0.42) : s.creature.head.getWorldPosition(new THREE.Vector3()).add(V3(0, 0.3, 0))).project(this.camera);
     return { x: (p.x * 0.5 + 0.5) * w, y: (-p.y * 0.5 + 0.5) * h, vis: p.z < 1 };
   }
 
@@ -512,7 +535,7 @@ export class Stage {
     const look = this.focus ? (this.focus === this.you ? this.camBase.clone() : this.seatPoint(this.focus)) : this.camBase.clone();
     for (const s of this.seats.values()) if (s.creature) s.creature.update(t, s.pid === this.focus ? this.camBase.clone() : look, s.mood || 0);
     this.dealer?.update(t, TABLE.c.clone(), 0);
-    for (const m of this.deckCards || []) { const up = m === this.deckHover ? 0.05 : 0; m.position.y += (m.userData.base.y + up - m.position.y) * 0.2; }
+    for (const m of this.deckCards || []) { if (m.userData.anim) continue; const up = m === this.deckHover ? 0.05 : 0; m.position.y += (m.userData.base.y + up - m.position.y) * 0.2; }
     // respiration des mains
     if (!this.handBusy && !this.holdR) {
       this.R.position.y = this.poseR.pos.y + Math.sin(t * 1.3) * 0.002;
@@ -520,7 +543,7 @@ export class Stage {
     }
     if (!this.holdL) this.L.position.y = this.poseL.pos.y + Math.sin(t * 1.2 + 1) * 0.002;
     // caméra : regard qui suit la souris + secousse
-    const yaw = -this.mouse.x * 0.16, pitch = this.mouse.y * 0.08;
+    const yaw = this.mouse.x * 0.16, pitch = this.mouse.y * 0.08;
     const lk = this.lookBase.clone().add(V3(Math.sin(yaw) * 1.4, pitch * 1.4 + Math.sin(t * 0.5) * 0.008, 0));
     this.camera.position.copy(this.camBase);
     if (this.shakeAmt > 0.0005) { this.camera.position.add(V3((Math.random() - 0.5) * this.shakeAmt, (Math.random() - 0.5) * this.shakeAmt, 0)); this.shakeAmt *= 0.88; }
