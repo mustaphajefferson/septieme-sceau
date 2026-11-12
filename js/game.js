@@ -26,7 +26,7 @@ const ROMAN = ['N', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
 export const roman = (n) => ROMAN[n] ?? String(n);
 
 // ── Deck ─────────────────────────────────────────────────────
-export function buildDeck() {
+export function buildDeck(extra = []) {
   const deck = [];
   let i = 0;
   const id = () => 'c' + (i++);
@@ -35,7 +35,8 @@ export function buildDeck() {
   for (const a of ['freeze', 'three', 'chance']) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
   for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
   deck.push({ id: id(), t: 'x', v: 2 });
-  return deck; // 94
+  extra.forEach((c, k) => deck.push({ ...c, id: 'r' + k, relic: true, owner: 'me' }));
+  return deck; // 94 + reliques
 }
 
 export function shuffle(arr, rng = Math.random) {
@@ -50,6 +51,7 @@ export function cardTitle(c) {
   if (!c) return '';
   if (c.t === 'n') return RANK_NAMES[c.v];
   if (c.t === 'a') return ACTIONS[c.a].name;
+  if (c.relic) return 'RELIQUE';
   if (c.t === 'm') return 'OBOLE +' + c.v;
   if (c.t === 'x') return 'COURONNE ×2';
   return '?';
@@ -84,7 +86,7 @@ export function bustRisk(state, pid) {
 // Composition restante de l'Ossuaire (si on ne voit que la défausse + les mains)
 export function remainingCounts(state) {
   const counts = {};
-  const full = buildDeck();
+  const full = buildDeck(state.extra || []);
   for (const c of full) counts[key(c)] = (counts[key(c)] || 0) + 1;
   const seen = [...(state.discard || [])];
   for (const p of state.players) seen.push(...p.nums, ...p.mods, ...(p.chance ? [p.chance] : []), ...(p.used || []));
@@ -101,15 +103,16 @@ export class Match {
    * @param {Record<string,{decide:Function,chooseTarget:Function}>} o.controllers
    * @param {(ev:object, snap:object)=>Promise<void>} o.presenter
    */
-  constructor({ players, controllers, presenter, rng = Math.random, target = TARGET, dealer = 0 }) {
+  constructor({ players, controllers, presenter, rng = Math.random, target = TARGET, dealer = 0, extra = [] }) {
     this.target = target;
+    this.extra = extra;
     this.rng = rng;
     this.players = players.map((p) => ({
       score: 0, ...p, nums: [], mods: [], chance: null, used: [], status: 'active', flip7: false, last: 0,
     }));
     this.controllers = controllers;
     this.presenter = presenter;
-    this.deck = shuffle(buildDeck(), rng);
+    this.deck = shuffle(buildDeck(extra), rng);
     this.discard = [];
     this.round = 0;
     this.dealer = dealer % this.players.length;
@@ -128,6 +131,7 @@ export class Match {
       discard: this.discard.slice(),
       discardTop: this.discard[this.discard.length - 1] || null,
       target: this.target,
+      extra: this.extra,
       winner: this.winner,
       players: this.players.map((p) => ({
         id: p.id, name: p.name, kind: p.kind, persona: p.persona, score: p.score,
@@ -228,6 +232,13 @@ export class Match {
     }
     const card = this.draw();
     await this.emit({ type: 'reveal', pid: p.id, card });
+
+    // une relique du chevalier se refuse à tout autre : elle brûle, sans effet
+    if (card.relic && card.owner !== p.id) {
+      this.discard.push(card);
+      await this.emit({ type: 'void', pid: p.id, card });
+      return null;
+    }
 
     if (card.t === 'n') {
       const dupe = p.nums.find((c) => c.v === card.v && !c.dup);

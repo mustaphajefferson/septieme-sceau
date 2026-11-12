@@ -15,7 +15,7 @@ img { image-rendering: pixelated; }
 #app { position: fixed; inset: 0; z-index: 1; }
 .screen { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
 .screen.on { visibility: visible; pointer-events: auto; }
-#title, #hub, #unlock, #death { cursor: pointer; }
+#title, #death { cursor: pointer; }
 
 /* bouton sigil (ogive) */
 .sigil { position: absolute; left: 50%; bottom: 4.5vh; transform: translateX(-50%); padding: 0; }
@@ -72,14 +72,15 @@ img { image-rendering: pixelated; }
 .cd.sealed img.f { box-shadow: 0 0 0 1px #000, 0 0 0 3px var(--ink), 4px 6px 0 rgba(0,0,0,.6); }
 .cd.frost img.f { filter: contrast(.6) brightness(1.3); }
 
-.val { position: absolute; transform: translate(-50%, -50%); font: 400 30px/1 "Jacquard", serif; text-shadow: 2px 2px 0 #000; pointer-events: none; }
-.val.foe { font-size: 24px; }
+.val { position: absolute; left: 50%; transform: translateX(-50%); font: 400 30px/1 "Jacquard", serif; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+.val.foe { top: 48.5vh; font-size: 22px; } .val.me { top: 69vh; left: 36%; }
 .val.bust { color: #000; background: var(--ink); padding: 0 6px; }
 .val.stayed, .val.frozen { text-decoration: underline; }
 
 .tgt { position: absolute; display: none; border: 2px dashed var(--ink); animation: blink .6s steps(2) infinite; }
 .tgt.on { display: block; }
-#tgt-foe, #tgt-me { width: min(24vw, 200px); height: min(32vh, 260px); transform: translate(-50%, -50%); }
+#tgt-foe { left: 34vw; width: 32vw; top: 8vh; height: 40vh; }
+#tgt-me { left: 22vw; width: 56vw; top: 70vh; height: 22vh; }
 @keyframes blink { 50% { border-color: transparent; } }
 #tgt-sym { position: absolute; left: 50%; top: 52vh; transform: translateX(-50%); font-size: 40px; display: none; filter: drop-shadow(2px 2px 0 #000); }
 #tgt-sym.on { display: block; }
@@ -94,14 +95,15 @@ img { image-rendering: pixelated; }
 #banner b { display: block; font: 400 clamp(46px, 7vw, 90px)/1 "Jacquard", serif; text-shadow: 3px 3px 0 #000; white-space: nowrap; }
 #banner small { display: block; font: 400 26px/1 "Jacquard", serif; margin-top: 8px; text-shadow: 2px 2px 0 #000; }
 
-#inspect { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(0,0,0,.75); cursor: zoom-out; perspective: 1000px; }
+#inspect { position: fixed; inset: 0; z-index: 55; display: grid; place-items: center; background: rgba(0,0,0,.75); cursor: zoom-out; perspective: 1000px; }
 .ins-card { position: relative; width: min(300px, 70vw); aspect-ratio: 1 / 1.46; transform: rotateX(var(--rx, 0)) rotateY(var(--ry, 0)); transition: transform .1s; box-shadow: 0 0 0 1px var(--ink), 10px 14px 0 rgba(0,0,0,.6); }
 .ins-card img { width: 100%; height: 100%; display: block; }
 .ins-card .holo, .ins-card .glare { position: absolute; inset: 0; pointer-events: none; }
 .ins-card .holo { background: repeating-linear-gradient(115deg, transparent 0%, rgba(255,210,120,.35) 8%, rgba(120,255,180,.35) 16%, rgba(120,170,255,.35) 24%, rgba(255,120,220,.3) 32%, transparent 40%); background-size: 300% 300%; background-position: var(--mx, 50%) var(--my, 50%); mix-blend-mode: color-dodge; opacity: .35; }
 .ins-card .glare { background: radial-gradient(circle at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,.4), transparent 45%); mix-blend-mode: overlay; }
 
-#unlock-card { position: absolute; right: 12vw; top: 50%; transform: translateY(-50%); width: min(200px, 30vw); aspect-ratio: 1 / 1.46; }
+#unlock-card { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: min(190px, 30vw); aspect-ratio: 1 / 1.46; transition: top .6s, width .6s; }
+#unlock.picking #unlock-card { top: 30%; width: min(150px, 24vw); }
 #unlock-card .cd { position: absolute; inset: 0; width: 100%; height: 100%; transform: none; left: 0; top: 0; perspective: 900px; }
 
 #pause-menu { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(0,0,0,.8); }
@@ -114,5 +116,33 @@ img { image-rendering: pixelated; }
   #gauge { left: 8px; height: 34vh; top: 34%; }
   .sigil span { font-size: 22px; padding: 18px 22px 8px; }
   #preview { width: 160px; } #preview canvas { width: 160px; height: 175px; }
-  #unlock-card { right: 50%; transform: translate(50%, 0); top: auto; bottom: 8vh; width: 120px; }
+  #tgt-foe { left: 25vw; width: 50vw; }
+  #unlock-card { width: 140px; }
+  #unlock.picking #unlock-card { width: 104px; top: 28%; }
+  .val.me { top: 68vh; left: 18%; }
+}
+
+/* ── le deck ── */
+#grim { position: absolute; left: 50%; top: 7vh; transform: translateX(-50%); width: min(1060px, 92vw); max-height: 74vh; overflow-y: auto; text-align: center; scrollbar-width: none; }
+#grim h2 { font: 400 clamp(38px, 5vw, 60px)/1 "Jacquard", serif; text-shadow: 3px 3px 0 #000; margin: 0 0 2vh; }
+#grim h3, #unlock-pick h3 { font: 700 18px/1 "Grenze", serif; letter-spacing: .12em; text-transform: uppercase; margin: 3vh 0 1.4vh; text-shadow: 2px 2px 0 #000; }
+#grim .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
+.gc { position: relative; width: clamp(56px, 5.9vw, 70px); aspect-ratio: 1 / 1.46; padding: 0; cursor: zoom-in; transition: transform .15s; box-shadow: 0 0 0 1px var(--ink), 5px 7px 0 rgba(0,0,0,.6); }
+.gc:hover { transform: translateY(-6px) rotate(-1.5deg); }
+.gc img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.gc.locked { cursor: default; opacity: .45; box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
+.gc.locked:hover { transform: none; }
+.gc i { position: absolute; right: -6px; bottom: -8px; font: 400 18px/1 "Jacquard", serif; font-style: normal; background: #000; color: var(--ink); padding: 2px 4px; border: 1px solid var(--ink); }
+.gc.locked i { opacity: .7; }
+#grim .empty { font: 700 15px/1.4 "Grenze", serif; opacity: .6; }
+#unlock-pick { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%); text-align: center; width: 92vw; }
+#unlock-pick .row { display: flex; justify-content: center; gap: 22px; }
+#unlock-pick button { display: grid; gap: 8px; justify-items: center; font: 700 15px/1.1 "Grenze", serif; cursor: pointer; }
+#unlock-pick button .gc { width: clamp(84px, 9vw, 120px); cursor: pointer; }
+#unlock-pick button:hover .gc { transform: translateY(-8px); box-shadow: 0 0 0 2px #fff, 5px 7px 0 rgba(0,0,0,.6); }
+@media (max-width: 760px) {
+  #grim { top: 5vh; max-height: 78vh; }
+  .gc { width: 58px; }
+  #unlock-pick .row { gap: 12px; }
+  #unlock-pick button .gc { width: 78px; }
 }

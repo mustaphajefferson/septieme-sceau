@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  Le parcours du Chevalier : 3 zones × (3 adversaires + boss).
-//  Chaque victoire donne l'élément porté par l'adversaire et
-//  l'illustration d'un rang de carte (1 à 12).
+//  Chaque victoire donne l'illustration d'un rang de carte (1 à 12)
+//  et une relique à ajouter à ton deck.
 // ─────────────────────────────────────────────────────────────
 
 export const PALIERS = [30, 50, 100, 200];
@@ -28,38 +28,27 @@ export const FOES = [
   { name: 'Le Roi déchu', risk: 0.33, reward: 'couronne', boss: true, ambiance: 'cendres', extra: 'cadre', kit: { body: 'robe', head: 'king', hands: 'bony', pauldrons: 'loup' } },
 ];
 
-export const ITEMS = {
-  cape: { name: 'Cape en lambeaux', kind: 'perso' },
-  gantelets: { name: 'Gantelets à épines', kind: 'perso' },
-  cimier: { name: 'Cimier de cerf', kind: 'perso' },
-  epaulieres: { name: 'Épaulières du Loup', kind: 'perso' },
-  bouclier: { name: 'Bouclier clouté', kind: 'perso' },
-  etendard: { name: 'L\'Étendard', kind: 'honneur' },
-  plastron: { name: 'Plastron au Soleil', kind: 'perso' },
-  heaume: { name: 'Heaume à piques', kind: 'perso' },
-  vitrail: { name: 'Le Vitrail', kind: 'honneur' },
-  epee: { name: 'Épée de justice', kind: 'perso' },
-  trophees: { name: 'Les Trophées', kind: 'honneur' },
-  couronne: { name: 'Couronne brisée', kind: 'perso' },
-  cadre: { name: 'Le Cadre des Honneurs', kind: 'honneur' },
-  brume: { name: 'Brume & lucioles', kind: 'ambiance' },
-  pluie: { name: 'La Pluie', kind: 'ambiance' },
-  cendres: { name: 'Cendres & braises', kind: 'ambiance' },
+// Les reliques : cartes qui rejoignent ton deck après chaque victoire.
+// Elles ne servent que toi : si l'adversaire en tire une, elle brûle sans effet.
+export const RELICS = {
+  obole4: { name: "Obole d'argent", card: { t: 'm', v: 4 } },
+  obole6: { name: 'Obole de cuivre', card: { t: 'm', v: 6 } },
+  obole8: { name: "Obole d'or", card: { t: 'm', v: 8 } },
+  obole10: { name: 'Denier du Roi', card: { t: 'm', v: 10 }, rare: true },
+  couronne: { name: 'Couronne ×2', card: { t: 'x', v: 2 }, rare: true },
+  sursis: { name: 'Sursis', card: { t: 'a', a: 'chance' } },
+  givre: { name: 'Givre', card: { t: 'a', a: 'freeze' } },
+  glas: { name: 'Les Trois Glas', card: { t: 'a', a: 'three' } },
 };
+export const relicCard = (id) => ({ ...RELICS[id].card, relic: true, owner: 'me', rid: id });
 
-// Apparence du chevalier selon ce qui est débloqué
-export function knightKit(un) {
-  const has = (k) => un.includes(k);
-  return {
-    sword: has('epee') ? 'bourreau' : 'arming',
-    cape: has('cape') ? 1 : 0,
-    gauntlets: has('gantelets') ? 'epines' : 'plain',
-    crest: has('cimier') ? 'cerf' : null,
-    pauldrons: has('epaulieres') ? 'loup' : 'plates',
-    shield: has('bouclier') ? 1 : 0,
-    breast: has('plastron') ? 'soleil' : 'plain',
-    helm: has('heaume') ? 'piques' : 'basic',
-    crown: has('couronne') ? 1 : 0,
-    head: 'helm',
-  };
+// Trois reliques proposées après une victoire (un boss en garantit une rare)
+export function offer(n) {
+  const ids = Object.keys(RELICS), rares = ids.filter((k) => RELICS[k].rare), commons = ids.filter((k) => !RELICS[k].rare);
+  const pick = (arr) => arr.splice(Math.floor(Math.random() * arr.length), 1)[0];
+  const out = [];
+  if (FOES[n]?.boss) out.push(pick(rares));
+  const pool = [...commons, ...rares.filter((r) => !out.includes(r))];
+  while (out.length < 3) out.push(pick(pool));
+  return out;
 }

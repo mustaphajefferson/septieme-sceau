@@ -1,17 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 //  VII — LE SEPTIÈME SCEAU
-//  Titre → le Chevalier → la Route → le Duel → le butin (ou la mort)
+//  Titre → le Deck → la Route → le Duel → le butin (ou la mort)
 // ─────────────────────────────────────────────────────────────
 import { Dither, ditherCanvas } from './dither.js';
 import { canvas, grad, radial, glow, vignette, goth, TAU, rng, fbm, clamp } from './paint.js';
-import { mist, rain, ash, fireflies, dust, frameSimple, frameHonneurs } from './places.js';
-import { View, portrait, buildFigure } from './world3d.js';
-import { POSE_ORDER, skull } from './body3d.js';
-import { ZONES, FOES, ITEMS, PALIERS, knightKit } from './content.js';
-import { setUnlockedRanks, setPortrait, face, back } from './cards.js';
-import { Match } from './game.js';
+import { drawFigure, skullFace } from './figure.js';
+import { ZONE_DRAW, mist, rain, ash, fireflies, dust, frameSimple } from './places.js';
+import { ZONES, FOES, PALIERS, RELICS, relicCard, offer } from './content.js';
+import { setUnlockedRanks, face, back } from './cards.js';
+import { Match, RANK_NAMES } from './game.js';
 import { makeAI } from './ai.js';
-import { Duel } from './duel3d.js';
+import { Duel } from './duel.js';
 import { sound } from './audio.js';
 import { icon } from './icons.js';
 
@@ -20,8 +19,8 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── sauvegarde ───────────────────────────────────────────────
-const KEY = 'vii-save-2';
-const fresh = () => ({ unlocked: [], ranks: [], node: 0, score: 0, pose: 0 });
+const KEY = 'vii-save-3';
+const fresh = () => ({ ranks: [], relics: [], node: 0, score: 0 });
 let save = (() => { try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fresh(); } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { /* */ } };
 { // raccourcis de test : ?reset  ·  ?jusqua=N (débloque les N premiers combats)
@@ -30,13 +29,11 @@ const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); }
   if (q.has('jusqua')) {
     save = fresh();
     const n = Math.min(12, +q.get('jusqua') || 0);
-    for (let i = 0; i < n; i++) { const f = FOES[i]; save.unlocked.push(f.reward); if (f.ambiance) save.unlocked.push(f.ambiance); if (f.extra) save.unlocked.push(f.extra); save.ranks.push(i + 1); }
-    save.node = n; save.pose = n % 3; persist();
+    for (let i = 0; i < n; i++) { save.ranks.push(i + 1); save.relics.push(offer(i)[0]); }
+    save.node = n; persist();
   }
 }
-setPortrait((foe, w, h) => portrait(foe.kit, w, h, { key: foe.name }));
 setUnlockedRanks(save.ranks);
-const has = (k) => save.unlocked.includes(k);
 const done = () => save.node >= 12;
 const zoneOf = (n) => ZONES[Math.min(2, Math.floor(Math.min(n, 11) / 4))];
 
@@ -47,8 +44,8 @@ const dither = new Dither(glc);
 const src = canvas(10, 10), ctx = src.getContext('2d');
 let W = 10, H = 10, bake = {};
 function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, 3), D = dpr >= 2 ? dpr * 0.85 : 1.05;
-  W = Math.min(1700, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
+  const dpr = Math.min(devicePixelRatio || 1, 2), D = dpr >= 2 ? 2.6 : 1.5;
+  W = Math.min(1500, Math.round(innerWidth * dpr / D)); H = Math.max(10, Math.round(W * innerHeight / innerWidth));
   src.width = W; src.height = H; dither.size(W, H);
   bake = {};
   if (current === 'map') placeNodes();
@@ -76,8 +73,9 @@ function show(id) {
   current = id;
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
   const z = zoneOf(save.node);
-  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: id === 'map' ? 1.3 : 1.55, gain: 1.15, lift: 0 });
+  dither.set({ ink: id === 'duel' ? duelInk : z.ink, gamma: 1.3, gain: 1.08, lift: 0 });
   if (id === 'map') placeNodes();
+  if (id === 'hub') buildDeck();
 }
 
 // ── ÉCRAN TITRE ─────────────────────────────────────────────
@@ -99,14 +97,14 @@ function pinnacle(c, x, y, h, s) {
   }
   c.beginPath(); c.arc(x, y - h - 4 * s, 4 * s, 0, TAU); c.fill();
 }
-const views = {};
 function titleScreen(c, W, H, t, dt) {
   const place = done() ? 'trone' : zoneOf(save.node).place;
-  const view = (views[place] ||= new View(place));
+  const key = 'title' + place;
+  if (!bake[key]) { const b = canvas(W, H); ZONE_DRAW[place](b.getContext('2d'), W, H, 4); bake[key] = b; }
   const s = H / 600, cx = W / 2, top = H * 0.07, bot = H * 0.74, aw = Math.min(W * 0.62, H * 0.82);
   const arch = ogive(cx, top, bot, aw);
   c.save(); c.clip(arch);
-  view.draw(c, W, H, t);
+  c.drawImage(bake[key], 0, 0);
   if (place === 'foret') mist(c, W, H, t, 0.6, 0.25);
   rain(c, W, H, dt, 0.55);
   c.restore();
@@ -132,38 +130,52 @@ function titleScreen(c, W, H, t, dt) {
   frameSimple(c, W, H);
 }
 
-// ── LE CHEVALIER ─────────────────────────────────────────────
-let knight = null, knightKey = '';
-function hubView() {
-  const v = (views.hub ||= new View('hub'));
-  const kit = knightKit(save.unlocked), pose = done() ? 'trone' : POSE_ORDER[save.pose % POSE_ORDER.length];
-  const k = JSON.stringify(kit) + pose;
-  if (k !== knightKey) {
-    knight?.root.removeFromParent();
-    knight = buildFigure(kit); knight.setPose(pose); knightKey = k;
-    v.scene.add(knight.root);
-    const H = v.P.honneurs;
-    H.vitrail.visible = has('vitrail'); H.etendard.visible = has('etendard'); H.trophees.visible = has('trophees'); H.throne.visible = done();
-    knight.root.position.set(0, 0.24, done() ? -1.35 : 0);
-    if (done()) knight.root.position.y = 0.24 + 0.72 * 0.9 - 0.48;
-    knight.root.rotation.y = pose === 'salut' ? -0.25 : pose === 'genou' ? 0.5 : 0.3;
-  }
-  return v;
-}
+// ── LE DECK ──────────────────────────────────────────────────
 function hubScreen(c, W, H, t, dt) {
-  const v = hubView();
-  const tall = H > W;
-  const low = knight.pose === 'genou' ? -0.12 : 0;
-  v.setCam(tall ? [0, 1.5 + low, 5.8] : [0.5, 1.45 + low, 4.6], [0, (tall ? 1.2 : 1.12) + low, 0], tall ? 40 : 34);
-  v.drift = 0.6;
-  knight.update(t);
-  v.draw(c, W, H, t, { portrait: false });
-  if (has('brume')) { mist(c, W, H, t, 0.72, 0.3); fireflies(c, W, H, t); }
-  if (has('pluie')) rain(c, W, H, dt, 0.7);
-  if (has('cendres')) ash(c, W, H, dt);
-  dust(c, W, H, t, 0.35);
-  vignette(c, W, H, 0.8, 0.3);
-  if (has('cadre')) frameHonneurs(c, W, H, t); else frameSimple(c, W, H);
+  const z = zoneOf(save.node), k = 'deckbg' + z.place + W;
+  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); ZONE_DRAW[z.place](bc, W, H, 4); bc.fillStyle = 'rgba(0,0,0,.72)'; bc.fillRect(0, 0, W, H); bake[k] = b; }
+  c.drawImage(bake[k], 0, 0);
+  glow(c, W / 2, H * 0.35, H * 0.6, 0.08);
+  if (z.place === 'foret') { mist(c, W, H, t, 0.8, 0.18); fireflies(c, W, H, t); }
+  if (z.place === 'pont') rain(c, W, H, dt, 0.5);
+  if (z.place === 'chateau') ash(c, W, H, dt);
+  dust(c, W, H, t, 0.3);
+  vignette(c, W, H, 0.85, 0.3);
+  frameSimple(c, W, H);
+}
+function inspect(card) {
+  const box = $('#inspect');
+  box.innerHTML = `<div class="ins-card"><img src="${face(card, 320)}" alt=""><i class="holo"></i><i class="glare"></i></div>`;
+  box.classList.remove('hidden');
+  const ic = box.querySelector('.ins-card');
+  box.onpointermove = (e) => {
+    const r = ic.getBoundingClientRect(), mx = (e.clientX - r.left) / r.width, my = (e.clientY - r.top) / r.height;
+    ic.style.setProperty('--mx', mx * 100 + '%'); ic.style.setProperty('--my', my * 100 + '%');
+    ic.style.setProperty('--rx', ((0.5 - my) * 16).toFixed(1) + 'deg'); ic.style.setProperty('--ry', ((mx - 0.5) * 20).toFixed(1) + 'deg');
+  };
+  box.onclick = () => box.classList.add('hidden');
+  sound.play('flip');
+}
+function cardBtn(card, { locked = false, count = '', label = '' } = {}) {
+  const b = document.createElement('button');
+  b.className = 'gc' + (locked ? ' locked' : '');
+  b.innerHTML = `<img src="${locked ? back(120) : face(card, 120)}" alt="${label}">${count ? `<i>${count}</i>` : ''}`;
+  b.title = label;
+  if (!locked) b.onclick = (e) => { e.stopPropagation(); inspect(card); };
+  return b;
+}
+function buildDeck() {
+  const R = $('#grim-ranks'), L = $('#grim-relics');
+  R.innerHTML = ''; L.innerHTML = '';
+  for (let v = 0; v <= 12; v++) {
+    const open = v === 0 || save.ranks.includes(v);
+    R.appendChild(cardBtn({ t: 'n', v, id: 'g' + v }, { locked: !open, count: '×' + Math.max(1, v), label: open ? RANK_NAMES[v] : '?' }));
+  }
+  const counts = {};
+  for (const id of save.relics) counts[id] = (counts[id] || 0) + 1;
+  for (const id of Object.keys(counts)) L.appendChild(cardBtn(relicCard(id), { count: counts[id] > 1 ? '×' + counts[id] : '', label: RELICS[id].name }));
+  if (!save.relics.length) L.innerHTML = '<p class="empty">Bats un adversaire pour gagner ta première relique.</p>';
+  $('#grim-title').textContent = done() ? 'Le deck du Roi-tombeur' : 'Ton deck';
 }
 
 // ── LA ROUTE ─────────────────────────────────────────────────
@@ -212,7 +224,7 @@ function mapScreen(c, W, H, t) {
   const s = H / 600;
   NODE_POS.forEach(([nx, ny], i) => {
     const x = nx * W, y = ny * H, boss = FOES[i].boss, R = (boss ? 16 : 10) * s;
-    if (i < save.node) { c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, R * 0.7, 0, TAU); c.fill(); c.fillStyle = '#000'; c.fillRect(x - R * 0.4, y - R * 0.2, R * 0.3, R * 0.3); c.fillRect(x + R * 0.1, y - R * 0.2, R * 0.3, R * 0.3); }
+    if (i < save.node) skullFace(c, x, y + 2 * s, s * (boss ? 0.42 : 0.3), { k: 1, sc: 1 / s }, { teeth: true });
     else if (i === save.node) {
       const p = 0.5 + 0.5 * Math.sin(t * 4);
       glow(c, x, y, R * 4, 0.35 * p + 0.15);
@@ -246,7 +258,11 @@ const previews = {};
 function showPreview(i, x, y) {
   const pv = $('#pv');
   if (!previews[i]) {
-    previews[i] = ditherCanvas(portrait(FOES[i].kit, 140, 154, { key: FOES[i].name }), { ink: zoneOf(i).ink, gamma: 1.3 });
+    const cv = canvas(140, 154), c = cv.getContext('2d');
+    c.fillStyle = '#000'; c.fillRect(0, 0, 140, 154);
+    c.fillStyle = radial(c, 70, 60, 2, 110, [[0, 0.35], [1, 0]]); c.fillRect(0, 0, 140, 154);
+    drawFigure(c, { x: 70, y: 52 + 905 * 0.12, s: 0.12, pose: 'table', kit: FOES[i].kit, t: 2, bust: true, breathe: false });
+    previews[i] = ditherCanvas(cv, { ink: zoneOf(i).ink, gamma: 1.4 });
   }
   pv.width = 140; pv.height = 154; pv.getContext('2d').drawImage(previews[i], 0, 0);
   $('#pv-name').textContent = FOES[i].name;
@@ -262,7 +278,7 @@ async function startDuel() {
   const dealer = j < 3 ? FOES[z * 4 + 3] : null;
   const myStart = j === 0 ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1], target = PALIERS[j];
   duelInk = zone.ink;
-  duel.setup({ foe, dealer, place: zone.place === 'chateau' && j === 3 ? 'trone' : zone.place, meId: 'me', foeId: 'foe', kit: knightKit(save.unlocked), target, ink: zone.ink });
+  duel.setup({ foe, dealer, place: zone.place === 'chateau' && j === 3 ? 'trone' : zone.place, meId: 'me', foeId: 'foe', kit: {}, target, ink: zone.ink });
   show('duel');
   sound.stopMusic(); sound.startMusic('table'); sound.play('enter');
   const ban = $('#banner');
@@ -276,7 +292,7 @@ async function startDuel() {
     foe: makeAI(null, { risk: foe.risk }),
   };
   const match = new Match({
-    players, controllers, target, dealer: 1,
+    players, controllers, target, dealer: 1, extra: save.relics.map(relicCard),
     presenter: async (ev, snap) => { while (paused) await wait(100); await duel.present(ev, snap); },
   });
   session = { match, n };
@@ -291,43 +307,51 @@ async function startDuel() {
 
 let unlockState = null, deathState = null;
 function victory(n, score) {
-  const foe = FOES[n], j = n % 4;
-  const gained = [];
-  for (const k of [foe.reward, foe.ambiance, foe.extra]) if (k && !has(k)) { save.unlocked.push(k); gained.push(k); }
+  const j = n % 4;
   if (!save.ranks.includes(n + 1)) save.ranks.push(n + 1);
   setUnlockedRanks(save.ranks);
   save.score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
   save.node = Math.max(save.node, n + 1);
-  save.pose = (save.pose + 1) % POSE_ORDER.length;
   persist();
-  unlockState = { n, gained: gained.length ? gained : [foe.reward], t: 0 };
+  unlockState = { n, t: 0, picked: false };
   sound.stopMusic(); sound.play('win');
   show('unlock');
-  const uc = $('#unlock-card');
+  $('#unlock').classList.remove('picking');
+  const uc = $('#unlock-card'), pk = $('#unlock-pick');
+  pk.classList.add('hidden');
   uc.innerHTML = `<div class="cd down"><div class="cd-in"><img class="f" src="${face({ t: 'n', v: n + 1, id: 'u' }, 200)}" alt=""><img class="b" src="${back(200)}" alt=""></div></div>`;
-  setTimeout(() => { uc.querySelector('.cd')?.classList.remove('down'); sound.play('flip'); }, 1600);
+  setTimeout(() => { uc.querySelector('.cd')?.classList.remove('down'); sound.play('flip'); }, 1400);
+  // puis trois reliques à choisir
+  const row = pk.querySelector('.row'); row.innerHTML = '';
+  for (const id of offer(n)) {
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="gc"><img src="${face(relicCard(id), 140)}" alt=""></span><span>${RELICS[id].name}</span>`;
+    b.onclick = (e) => {
+      e.stopPropagation(); if (unlockState.picked) return;
+      unlockState.picked = true; save.relics.push(id); persist();
+      sound.play('gain'); b.querySelector('.gc').style.transform = 'translateY(-30px) scale(1.1)';
+      setTimeout(backToHub, 700);
+    };
+    row.appendChild(b);
+  }
+  setTimeout(() => { $('#unlock').classList.add('picking'); pk.classList.remove('hidden'); sound.play('whoosh'); }, 3000);
 }
 function unlockScreen(c, W, H, t, dt) {
   const u = unlockState; if (!u) return;
   u.t += dt;
-  const s = H / 600, narrow = W < H;
-  const v = hubView();
-  const a = u.t * 0.25;
-  v.setCam(narrow ? [Math.sin(a) * 4.8, 1.8, Math.cos(a) * 4.8 + 1.4] : [Math.sin(a) * 3.8 - 1.1, 1.5, Math.cos(a) * 3.8], [narrow ? 0 : -0.55, narrow ? 1.5 : 1.25, 0], 36);
-  v.drift = 0;
-  knight.update(t);
-  c.save(); c.globalAlpha = clamp(u.t / 1.2); v.draw(c, W, H, t, { portrait: false }); c.restore();
-  vignette(c, W, H, 0.7, 0.3);
-  const names = u.gained.map((g) => ITEMS[g]?.name).filter(Boolean);
+  const s = H / 600;
+  glow(c, W / 2, H * 0.38, H * 0.5, 0.12);
+  c.save(); c.globalAlpha = clamp((u.t - 0.4) / 0.8);
+  const k = 'unlfoe' + u.n + W;
+  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'), sc = H / 900; drawFigure(bc, { x: W / 2, y: H * 0.05 + 905 * sc, s: sc, pose: 'table', kit: FOES[u.n].kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
+  c.globalAlpha *= 0.28; c.drawImage(bake[k], 0, 0); c.restore();
   c.save(); c.globalAlpha = clamp((u.t - 0.6) / 0.8);
-  goth(c, names[0] || '', W / 2, H * 0.12, Math.min(H * 0.085, W * 0.07), { stroke: 6 * s });
-  names.slice(1).forEach((nm, i) => goth(c, '+ ' + nm, W / 2, H * 0.19 + i * H * 0.05, H * 0.04, { stroke: 4 * s }));
+  goth(c, FOES[u.n].name + ' est tombé', W / 2, H * 0.1, Math.min(H * 0.06, W * 0.06), { stroke: 5 * s });
+  goth(c, 'Rang ' + (u.n + 1) + ' : ' + RANK_NAMES[u.n + 1].toLowerCase(), W / 2, H * 0.16, Math.min(H * 0.035, W * 0.04), { stroke: 3 * s });
   c.restore();
-  if (u.gained.includes('pluie')) rain(c, W, H, dt, 0.6);
-  if (u.gained.includes('cendres')) ash(c, W, H, dt);
-  if (u.gained.includes('brume')) { mist(c, W, H, t, 0.72, 0.3); fireflies(c, W, H, t); }
   dust(c, W, H, t, 0.4);
-  if (u.gained.includes('cadre')) frameHonneurs(c, W, H, t); else frameSimple(c, W, H);
+  vignette(c, W, H, 0.8, 0.3);
+  frameSimple(c, W, H);
 }
 
 function defeat(n) {
@@ -341,7 +365,7 @@ function deathScreen(c, W, H, t, dt) {
   const d = deathState; if (!d) return;
   d.t += dt;
   const foe = FOES[d.n], k = 'death' + d.n + W;
-  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const ph = Math.round(H * 0.9), pw = Math.round(ph * 0.9); bc.drawImage(portrait(foe.kit, pw, ph, { key: foe.name + 'mort', zoom: 1.25 }), (W - pw) / 2, 0); bake[k] = b; }
+  if (!bake[k]) { const b = canvas(W, H), bc = b.getContext('2d'); const s = H / 700; glow(bc, W / 2, H * 0.4, H * 0.6, 0.3); drawFigure(bc, { x: W / 2, y: H * 0.18 + 905 * s, s, pose: 'table', kit: foe.kit, t: 2, bust: true, breathe: false }); bake[k] = b; }
   const z = 1 + Math.min(0.15, d.t * 0.03);
   c.save(); c.translate(W / 2, H * 0.4); c.scale(z, z); c.translate(-W / 2, -H * 0.4); c.globalAlpha = clamp(d.t / 1.5); c.drawImage(bake[k], 0, 0); c.restore();
   c.fillStyle = grad(c, 0, H * 0.45, 0, H, [[0, 0], [1, 0]]);
@@ -372,7 +396,6 @@ addEventListener('keydown', (e) => {
 $('#to-map').addEventListener('click', (e) => { e.stopPropagation(); sound.play('click'); show('map'); });
 $('#map-back').addEventListener('click', () => { sound.play('click'); show('hub'); });
 const backToHub = () => { sound.play('click'); sound.startMusic('menu'); show('hub'); };
-$('#unlock').addEventListener('click', () => { if (unlockState?.t > 1.6) backToHub(); });
 $('#death').addEventListener('click', () => { if (deathState?.t > 1.8) backToHub(); });
 
 function togglePause(force) {
@@ -402,4 +425,4 @@ addEventListener('resize', resize);
   show('title');
   requestAnimationFrame(loop);
 })();
-window.__vii = { get save() { return save; }, show };
+window.__vii = { get save() { return save; }, show, victory };

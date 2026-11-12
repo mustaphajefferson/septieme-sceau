@@ -17,13 +17,19 @@
   <section id="title" class="screen on" aria-label="VII — Le Septième Sceau"></section>
 
   <section id="hub" class="screen">
+    <div id="grim">
+      <h2 id="grim-title">Ton deck</h2>
+      <div id="grim-ranks" class="grid"></div>
+      <h3>Reliques</h3>
+      <div id="grim-relics" class="grid"></div>
+    </div>
     <button id="to-map" class="sigil" aria-label="Prendre la route"><span>Prendre la route</span></button>
   </section>
 
   <section id="map" class="screen">
     <div id="nodes"></div>
     <div id="preview" class="hidden"><canvas id="pv"></canvas><b id="pv-name"></b></div>
-    <button id="map-back" class="corner-btn" aria-label="Retour au chevalier">◂</button>
+    <button id="map-back" class="corner-btn" aria-label="Retour au deck">◂</button>
   </section>
 
   <section id="duel" class="screen">
@@ -32,6 +38,9 @@
         <b id="g-target">30</b>
         <div class="col"><i id="g-foe-hand" class="hand"></i><i id="g-me-hand" class="hand"></i><span id="g-foe" class="mk foe"><b>0</b></span><span id="g-me" class="mk me"><b>0</b></span></div>
       </div>
+      <div id="deck" class="pile" aria-label="L'Ossuaire"></div>
+      <div id="fosse" class="pile"></div>
+      <div id="cards"></div>
       <span id="v-foe" class="val foe"></span>
       <span id="v-me" class="val me"></span>
       <button id="tgt-foe" class="tgt" aria-label="Viser l'adversaire"></button>
@@ -43,14 +52,14 @@
       </div>
       <div id="banner"></div>
       <button id="pause" class="corner-btn" aria-label="Pause">❚❚</button>
-      <div id="inspect" class="hidden"></div>
     </div>
   </section>
 
-  <section id="unlock" class="screen"><div id="unlock-card"></div></section>
+  <section id="unlock" class="screen"><div id="unlock-card"></div><div id="unlock-pick" class="hidden"><h3>Choisis une relique</h3><div class="row"></div></div></section>
   <section id="death" class="screen"></section>
 </main>
 
+<div id="inspect" class="hidden"></div>
 <div id="pause-menu" class="hidden">
   <div class="pm">
     <button data-p="resume">Reprendre</button>
