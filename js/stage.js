@@ -16,7 +16,7 @@ export class Stage {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.02, 40);
     this.camBase = V3(0, 1.3, 0.32);
-    this.lookBase = V3(0, 0.84, -1.05);
+    this.lookBase = V3(0, 0.98, -1.05);
     this.camera.position.copy(this.camBase);
     this.camera.lookAt(this.lookBase);
     this.crypt = buildCrypt(this.scene);
@@ -49,7 +49,7 @@ export class Stage {
     this.setDeckCount(94);
     const bowl = new THREE.Mesh(new THREE.LatheGeometry([[0.0, 0], [0.1, 0], [0.13, 0.03], [0.14, 0.06], [0.125, 0.065], [0.11, 0.03], [0, 0.02]].map(([x, y]) => new THREE.Vector2(x, y)), 14),
       new THREE.MeshStandardMaterial({ color: 0x6a6a5a, flatShading: true, roughness: 1 }));
-    bowl.position.copy(this.fossePos); this.scene.add(bowl);
+    bowl.position.copy(this.fossePos); this.scene.add(bowl); this.bowl = bowl;
     this.fosseFill = new THREE.Mesh(new THREE.CircleGeometry(0.11, 12), new THREE.MeshStandardMaterial({ color: 0x0c0a06 }));
     this.fosseFill.rotation.x = -Math.PI / 2; this.fosseFill.position.copy(this.fossePos).add(V3(0, 0.035, 0)); this.scene.add(this.fosseFill);
 
@@ -70,7 +70,7 @@ export class Stage {
 
   // ── sièges ─────────────────────────────────────────────────
   setPlayers(players, you) {
-    for (const s of this.seats.values()) if (s.creature) { this.scene.remove(s.creature.root); if (s.creature.root.userData.fill) this.scene.remove(s.creature.root.userData.fill); }
+    for (const s of this.seats.values()) if (s.creature) { this.scene.remove(s.creature.root); const f = s.creature.root.userData.fill; if (f) { this.scene.remove(f); if (f.userData.face) { const fc = f.userData.face; this.scene.remove(fc, fc.target); if (fc.userData.rim) this.scene.remove(fc.userData.rim, fc.userData.rim.target); } } }
     this.seats.clear();
     for (const m of this.cards.values()) this.scene.remove(m);
     this.cards.clear();
@@ -85,14 +85,19 @@ export class Stage {
       const d = V3(Math.sin(a), 0, -Math.cos(a));
       const kind = p.kind === 'ai' ? (PERSONA_CREATURE[p.persona] || p.persona) : 'pelerin';
       const cr = makeCreature(kind, kind === 'pelerin' ? pil++ : 0);
-      const sp = TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r + 0.42)); sp.y = 0;
-      cr.root.position.copy(sp);
+      const sp = TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r + 0.32)); sp.y = 0;
+      cr.root.position.copy(sp); cr.root.scale.setScalar(1.12);
       cr.root.lookAt(V3(TABLE.c.x, 0, TABLE.c.z)); cr.root.rotateY(Math.PI);
       cr.root.traverse((o) => { o.userData.pid = p.id; });
       this.scene.add(cr.root);
-      const fl = new THREE.PointLight(0xe8e8d0, 4.5, 2.4, 1.0);
+      const fl = new THREE.PointLight(0xe8e8d0, 9, 2.8, 1.0);
       fl.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.2))); fl.position.y = 1.35;
       this.scene.add(fl); cr.root.userData.fill = fl;
+      const face = new THREE.SpotLight(0xfff0d8, 45, 5, 0.45, 0.5, 1.0);
+      face.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.6))); face.position.y = 1.15;
+      face.target.position.copy(sp).setY(1.6); this.scene.add(face, face.target); fl.userData.face = face;
+      const rimL = new THREE.SpotLight(0xd8e8c0, 30, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;
+      rimL.target.position.copy(sp).setY(1.3); this.scene.add(rimL, rimL.target); face.userData.rim = rimL;
       this.seats.set(p.id, { pid: p.id, a, d, creature: cr, base: sp.clone(), kind });
     });
     this.seats.set(you, { pid: you, a: Math.PI, d: V3(0, 0, 1), creature: null, me: true });
@@ -118,32 +123,33 @@ export class Stage {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, yaw, 0, 'YXZ'));
     let pos;
     if (s.me) {
-      const gap = CARD_W + 0.012;
-      const x0 = -((count - 1) * gap) / 2 + 0.04;
-      pos = V3(x0 + i * gap, TABLE.c.y + 0.002 + i * 0.0002, row === 0 ? -0.56 : -0.69);
+      const sc = 1.45, gap = Math.min(CARD_W * sc + 0.01, 0.9 / Math.max(1, count));
+      const x0 = -((count - 1) * gap) / 2 + 0.02;
+      pos = V3(x0 + i * gap, TABLE.c.y + 0.03 + i * 0.0004, row === 0 ? -0.6 : -0.8);
+      return { pos, q: new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 0.55, 0, 0, 'YXZ')), sc };
     } else {
       const gap = CARD_W + 0.008;
       const tg = V3(Math.cos(s.a), 0, Math.sin(s.a));
       const base = TABLE.c.clone().add(s.d.clone().multiplyScalar(row === 0 ? 0.72 : 0.56));
       pos = base.add(tg.multiplyScalar(-((count - 1) * gap) / 2 + i * gap)); pos.y = TABLE.c.y + 0.002 + i * 0.0002;
     }
-    return { pos, q };
+    return { pos, q, sc: 1 };
   }
 
   layout(snap, { instant = false, skip = null } = {}) {
     const keep = new Set();
     for (const p of snap.players) {
-      if (!this.seats.has(p.id) || this.seats.get(p.id).me) continue;
+      if (!this.seats.has(p.id)) continue;
       const rows = [p.nums, [...p.mods, ...(p.chance ? [p.chance] : []), ...p.used]];
       rows.forEach((row, r) => row.forEach((c, i) => {
         keep.add(c.id);
         if (c.id === skip) return;
         let m = this.cards.get(c.id);
-        const { pos, q } = this.slotPose(p.id, r, i, row.length);
-        if (!m) { m = this.newCard(c); m.position.copy(pos); m.quaternion.copy(q); }
+        const { pos, q, sc } = this.slotPose(p.id, r, i, row.length);
+        if (!m) { m = this.newCard(c); m.position.copy(pos); m.quaternion.copy(q); m.scale.setScalar(sc); }
         else if (!m.userData.anim && (m.position.distanceTo(pos) > 0.001)) {
-          if (instant) { m.position.copy(pos); m.quaternion.copy(q); }
-          else this.moveCard(m, pos, q, 260);
+          if (instant) { m.position.copy(pos); m.quaternion.copy(q); m.scale.setScalar(sc); }
+          else { m.scale.setScalar(sc); this.moveCard(m, pos, q, 260); }
         }
         this.tintCard(m, c.dup ? 'dup' : p.status === 'bust' ? 'burnt' : p.status === 'frozen' ? 'frost' : null);
       }));
@@ -291,6 +297,71 @@ export class Stage {
     m.userData.anim = false;
     return m;
   }
+  async meDrawTable(card) {
+    this.handBusy = true;
+    const R = this.R, top = this.deckTop();
+    const wristAt = (pt, lift) => { const dir = pt.clone().sub(this.poseR.pos); dir.y = 0; dir.normalize(); return pt.clone().sub(dir.multiplyScalar(0.17)).add(V3(0, lift, 0)); };
+    const over = wristAt(top, 0.1);
+    await this.moveHand(R, { pos: over, rot: this.handAim(over, top, -0.35), curl: 0.05 }, 260);
+    const grab = wristAt(top, 0.035);
+    await this.moveHand(R, { pos: grab, rot: this.handAim(grab, top, -0.2), curl: 0.5 }, 150);
+    const m = this.newCard(card);
+    m.position.copy(top); m.quaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+    this.setDeckCount(this.deckCount - 1);
+    const hover = V3(0.16, TABLE.c.y + 0.16, -0.58), qUp = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 1.0, -0.15, 0, 'YXZ'));
+    m.userData.anim = true;
+    const p0 = m.position.clone(), q0 = m.quaternion.clone();
+    await Promise.all([
+      this.tween(420, (k) => { m.position.lerpVectors(p0, hover, k); m.position.y += Math.sin(k * Math.PI) * 0.08; m.quaternion.slerpQuaternions(q0, qUp, k); m.scale.setScalar(1 + k * 0.45); }),
+      this.moveHand(R, { pos: hover.clone().add(V3(0.1, -0.02, 0.12)), rot: this.handAim(hover.clone().add(V3(0.1, -0.02, 0.12)), hover, -0.1), curl: 0.6 }, 420),
+    ]);
+    m.userData.anim = false;
+    return m;
+  }
+
+  // ── le deck étalé sur la table ─────────────────────────────
+  deckMode(list) {
+    this.clearDeck();
+    this.R.visible = this.L.visible = false;
+    const tall = this.camera.aspect < 1;
+    const per = tall ? 4 : 7, sc = tall ? 2.4 : 2.1, gw = CARD_W * sc + 0.022, gh = CARD_H * sc + 0.03;
+    const ranks = list.filter((it) => !it.card.relic), relics = list.filter((it) => it.card.relic);
+    const rows = [];
+    for (let i = 0; i < ranks.length; i += per) rows.push(ranks.slice(i, i + per));
+    for (let i = 0; i < relics.length; i += per) rows.push(relics.slice(i, i + per));
+    const depth = rows.length * gh, z0 = TABLE.c.z - depth / 2 + gh / 2 - (tall ? 0.12 : 0.24);
+    this.bowl.visible = this.fosseFill.visible = false;
+    this.camBase = tall ? V3(0, 1.6 + depth * 0.45, TABLE.c.z + 0.35 + depth * 0.2) : V3(0, 1.62, -0.55);
+    this.lookBase = tall ? V3(0, 0.55, TABLE.c.z - 0.2) : V3(0, 0.74, -1.5);
+    this.deckCards = [];
+    rows.forEach((row, r) => row.forEach((it, c) => {
+      const k = this.deckCards.length;
+      const m = makeCardMesh(it.locked ? backTex() : faceTex(it.card), backTex());
+      const x = (c - (row.length - 1) / 2) * gw, z = z0 + r * gh + (it.card.relic && !tall ? 0.04 : 0);
+      m.position.set(x, TABLE.c.y + 0.004, z); m.scale.setScalar(sc);
+      m.quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2, Math.sin(k * 7.3) * 0.05, 0, 'YXZ'));
+      m.userData = { ...m.userData, deck: it, base: m.position.clone() };
+      if (it.locked) m.material.forEach((mt) => mt.color?.setScalar?.(0.45));
+      this.scene.add(m); this.deckCards.push(m);
+    }));
+  }
+  clearDeck() {
+    for (const m of this.deckCards || []) this.scene.remove(m);
+    this.deckCards = [];
+    this.R.visible = this.L.visible = true;
+    if (this.bowl) this.bowl.visible = this.fosseFill.visible = true;
+    this.camBase = V3(0, 1.3, 0.32); this.lookBase = V3(0, 0.98, -1.05);
+  }
+  deckAt(nx, ny) {
+    this.ray.setFromCamera({ x: nx, y: ny }, this.camera);
+    return this.ray.intersectObjects(this.deckCards || [], false)[0]?.object || null;
+  }
+  cardAt(nx, ny) {
+    this.ray.setFromCamera({ x: nx, y: ny }, this.camera);
+    const h = this.ray.intersectObjects([...this.cards.values()], false)[0];
+    return h?.object.userData.card || null;
+  }
+
   // repose la main au repos
   async handHome() {
     await this.moveHand(this.R, this.poseR, 320);
@@ -321,7 +392,7 @@ export class Stage {
   async settleCard(card, dest, snap) {
     const m = this.cards.get(card.id);
     if (!m) return;
-    let pos, q;
+    let pos, q, sc = 1;
     if (dest === 'fosse') { pos = this.fossePos.clone().add(V3(0, 0.04, 0)); q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, Math.random() * 3, 0)); }
     else if (dest?.seat) {
       const s = this.seats.get(dest.seat);
@@ -332,7 +403,7 @@ export class Stage {
       const all = [p.nums, [...p.mods, ...(p.chance ? [p.chance] : []), ...p.used]];
       let row = 0, i = all[0].findIndex((c) => c.id === card.id);
       if (i < 0) { row = 1; i = all[1].findIndex((c) => c.id === card.id); }
-      ({ pos, q } = this.slotPose(dest, row, Math.max(0, i), all[row].length));
+      ({ pos, q, sc } = this.slotPose(dest, row, Math.max(0, i), all[row].length));
     }
     m.userData.anim = true;
     m.userData.tint = undefined;
@@ -340,7 +411,7 @@ export class Stage {
     const mine = this.seats.get(dest)?.me && this.handBusy;
     const handTo = mine ? { pos: pos.clone().add(V3(0.04, 0.05, 0.16)), rot: this.handAim(pos.clone().add(V3(0.04, 0.05, 0.16)), pos, -0.3), curl: 0.35 } : null;
     await Promise.all([
-      this.tween(360, (k) => { m.position.lerpVectors(p0, pos, k); m.position.y += Math.sin(k * Math.PI) * 0.06; m.quaternion.slerpQuaternions(q0, q, k); m.scale.setScalar(s0 + (1 - s0) * k); }),
+      this.tween(360, (k) => { m.position.lerpVectors(p0, pos, k); m.position.y += Math.sin(k * Math.PI) * 0.06; m.quaternion.slerpQuaternions(q0, q, k); m.scale.setScalar(s0 + (sc - s0) * k); }),
       handTo ? this.moveHand(this.R, handTo, 360) : null,
     ]);
     m.userData.anim = false;
@@ -441,6 +512,7 @@ export class Stage {
     const look = this.focus ? (this.focus === this.you ? this.camBase.clone() : this.seatPoint(this.focus)) : this.camBase.clone();
     for (const s of this.seats.values()) if (s.creature) s.creature.update(t, s.pid === this.focus ? this.camBase.clone() : look, s.mood || 0);
     this.dealer?.update(t, TABLE.c.clone(), 0);
+    for (const m of this.deckCards || []) { const up = m === this.deckHover ? 0.05 : 0; m.position.y += (m.userData.base.y + up - m.position.y) * 0.2; }
     // respiration des mains
     if (!this.handBusy && !this.holdR) {
       this.R.position.y = this.poseR.pos.y + Math.sin(t * 1.3) * 0.002;

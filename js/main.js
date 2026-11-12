@@ -5,7 +5,6 @@
 // ─────────────────────────────────────────────────────────────
 import { THREE, DitherRenderer } from './render.js';
 import { buildExterior } from './world.js';
-import { AsciiView } from './asciiview.js';
 import { installFrameVars, drawScreenFrame } from './frames.js';
 import { portrait, portraitCanvas } from './gallery.js';
 import { Play } from './play.js';
@@ -65,10 +64,9 @@ setHandArt((v) => (v >= 1 && save.ranks.includes(v) ? { url: portrait(dr, 'f' + 
 const extScene = new THREE.Scene();
 const ext = buildExterior(extScene);
 const extCam = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
-const ascii = new AsciiView($('#asc'), dr.renderer);
 const SHOTS = {
   title: { pos: [0.4, 1.6, 5.5], look: [0, 4.2, -12], fov: 55 },
-  menu: { pos: [-1.6, 1.5, -1.0], look: [-0.6, 1.6, -9], fov: 44 },
+  menu: { pos: [-1.4, 1.45, -1.4], look: [-0.2, 2.2, -12], fov: 50 },
 };
 let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
 let shotFrom = null, shotTo = null, shotK = 1;
@@ -81,7 +79,7 @@ function goShot(name, dur = 2.2) {
 const frameSvg = $('#sframe-svg');
 const redrawFrame = () => drawScreenFrame(frameSvg);
 redrawFrame();
-addEventListener('resize', () => { ascii.resize(); redrawFrame(); });
+addEventListener('resize', redrawFrame);
 
 function placeGL() {
   const slot = $(`#${current} [data-gl]`);
@@ -92,6 +90,7 @@ function placeGL() {
   Object.assign(canvas.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', clipPath: 'none' });
   dr.resize(r.width, r.height);
   play.stage.resize(r.width, r.height);
+  extCam.aspect = r.width / r.height; extCam.updateProjectionMatrix();
 }
 addEventListener('resize', placeGL);
 
@@ -101,6 +100,7 @@ function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (document.hidden) return;
   if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
+  if (current === 'deck') { play.stage.update(dt); play.stage.render(); return; }
   ct += dt;
   ext.tick(ct);
   if (shotTo) {
@@ -110,8 +110,8 @@ function loop(now) {
     if (shotK >= 1) shotTo = null;
   }
   extCam.position.copy(shot.pos).add(new THREE.Vector3(Math.sin(ct * 0.13) * 0.15, Math.sin(ct * 0.21) * 0.05, 0));
-  extCam.fov = shot.fov; extCam.lookAt(shot.look);
-  ascii.render(extScene, extCam, dt, { dim: ['title', 'menu'].includes(current) ? 1 : 0.4 });
+  extCam.fov = shot.fov; extCam.updateProjectionMatrix(); extCam.lookAt(shot.look);
+  dr.render(extScene, extCam);
 }
 
 function show(id) {
@@ -119,6 +119,9 @@ function show(id) {
   document.body.classList.toggle('ingame', id === 'game');
   if (id === 'title' || id === 'menu') goShot(id);
   ext.setZone(zoneOf(save.node).place);
+  if (id !== 'game') dr.setPalette(PAL[zoneOf(save.node).place]);
+  document.body.classList.toggle('ondeck', id === 'deck');
+  if (id !== 'deck') play.stage.clearDeck();
   ext.showPilgrim(id !== 'title');
   $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
   requestAnimationFrame(placeGL);
@@ -129,11 +132,7 @@ document.addEventListener('pointerover', (e) => {
   const b = e.target.closest('button');
   if (b && !b.disabled && b !== document._h) { document._h = b; sound.play('hover'); }
 });
-const updateSound = () => {
-  $$('[data-sound-toggle]').forEach((b) => { b.innerHTML = icon(sound.muted ? 'mute' : 'note'); b.classList.toggle('off', !!sound.muted); });
-  $('#m-sound').textContent = sound.muted ? 'coupé' : 'actif';
-};
-$$('[data-sound-toggle]').forEach((b) => b.addEventListener('click', () => { sound.setMuted(!sound.muted); updateSound(); }));
+const updateSound = () => { const b = $('[data-p=sound] b'); if (b) b.textContent = sound.muted ? 'coupé' : 'actif'; };
 
 // ── carte agrandie (inspection) ─────────────────────────────
 function inspect(url) {
@@ -175,79 +174,47 @@ async function enter() {
 function openMenu() {
   const n = Math.min(save.node, 11), z = zoneOf(save.node), j = n % 4;
   $('#m-zone').textContent = z.name;
-  if (done()) {
-    $('#m-kick').textContent = 'La route est achevée';
-    $('#m-foe').textContent = 'Le trône est vide';
-    $('#m-tier').textContent = 'le Mage viendra';
-    $('#m-go').textContent = 'Rejouer le Roi déchu';
-    $('#m-go-sub').textContent = 'premier à 200';
-  } else {
-    $('#m-kick').textContent = FOES[n].boss ? 'Le maître des lieux' : 'Prochain duel · ' + (j + 1) + ' / 4';
-    $('#m-foe').textContent = FOES[n].name;
-    $('#m-tier').textContent = 'premier à ' + PALIERS[j];
-    $('#m-go').textContent = 'Affronter ' + FOES[n].name.replace(/^(Le |La |L')/, (m) => m.toLowerCase());
-    $('#m-go-sub').textContent = j < 3 ? FOES[Math.floor(n / 4) * 4 + 3].name + ' donne les cartes' : 'il s\'assoit';
-  }
-  $('#m-foe-img').src = art(n);
-  $('#m-deck-sub').textContent = `${save.ranks.length} visage${save.ranks.length > 1 ? 's' : ''} · ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}`;
-  $('#m-route-sub').textContent = `${save.node} / 12`;
+  $('#m-foe').textContent = done() ? 'Le trône est vide' : FOES[n].name;
+  $('#m-tier').textContent = done() ? 'rejouer le Roi déchu' : FOES[n].boss ? 'le maître des lieux' : 'premier à ' + PALIERS[j];
   show('menu');
 }
-$('#menu-list').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  sound.play('click');
-  if (b.hasAttribute('data-sound-toggle-row')) { sound.setMuted(!sound.muted); updateSound(); return; }
-  ({ duel: () => startDuel(done() ? 11 : save.node), deck: openDeck, route: openRoute, codex: openCodex })[b.dataset.act]?.();
-});
+$('#m-go').onclick = () => { sound.play('click'); startDuel(done() ? 11 : save.node); };
+$('#m-deck').onclick = () => { sound.play('click'); openDeck(); };
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); openMenu(); }));
 
-// ── LA ROUTE ─────────────────────────────────────────────────
-function openRoute() {
-  $('#route-zones').innerHTML = ZONES.map((z, zi) => `<div class="zone"><h3>${esc(z.name)}</h3><ol>${[0, 1, 2, 3].map((j) => {
-    const i = zi * 4 + j, f = FOES[i], st = i < save.node ? 'done' : i === save.node ? 'now' : 'locked';
-    const known = i <= save.node;
-    return `<li><button class="node ${st} ${f.boss ? 'boss' : ''}" data-n="${i}" ${st === 'now' ? '' : 'tabindex="-1"'}>
-      <span class="ar">${known ? `<img alt="" src="${art(i, 54, 60)}">` : '?'}</span>
-      <span><b>${known ? esc(f.name) : '· · ·'}</b><small>${f.boss ? 'boss · premier à 200' : 'premier à ' + PALIERS[j]}</small></span>
-      <span>${icon(st === 'done' ? 'seal' : f.boss ? 'skull' : st === 'now' ? 'candle' : 'door')}</span></button></li>`;
-  }).join('')}</ol></div>`).join('');
-  $('#route-zones').onclick = (e) => { const b = e.target.closest('.node.now'); if (b) { sound.play('click'); startDuel(+b.dataset.n); } };
-  show('route');
-}
-
-// ── LE DECK ──────────────────────────────────────────────────
+// ── LE DECK : étalé sur la table du lieu ─────────────────────
 function openDeck() {
-  $('#deck-ranks').innerHTML = Array.from({ length: 13 }, (_, v) => {
+  const st = play.stage, z = zoneOf(save.node);
+  st.setPlayers([{ id: 'you', name: 'Pèlerin', kind: 'human' }], 'you');
+  st.setDealer(null); st.crypt.setZone(z.place); st.setDeckCount(94 + save.relics.length);
+  const list = [];
+  for (let v = 0; v <= 12; v++) {
     const open = v === 0 || save.ranks.includes(v);
-    const url = open ? faceURL({ t: 'n', v }) : backURL();
-    return `<button class="cg ${open ? '' : 'locked'}" data-url="${open ? url : ''}" title="${esc(open ? RANK_NAMES[v] : 'Rang ' + v + ' : bats son gardien')}"><img alt="" src="${url}"><i>×${Math.max(1, v)}</i></button>`;
-  }).join('');
+    list.push({ card: { t: 'n', v, id: 'g' + v }, locked: !open, row: v < 7 ? 0 : 1, col: v < 7 ? v : v - 7, per: v < 7 ? 7 : 6, tip: open ? `Rang ${v} · ${RANK_NAMES[v].toLowerCase()} · ${Math.max(1, v)} dans l'Ossuaire` + (v ? ' · ' + FOES[v - 1].name : '') : `Rang ${v} · bats ${FOES[v - 1].name.toLowerCase()} pour lui donner un visage` });
+  }
   const counts = {}; for (const id of save.relics) counts[id] = (counts[id] || 0) + 1;
-  $('#deck-relics').innerHTML = Object.keys(counts).map((id) => { const url = faceURL(relicCard(id)); return `<button class="cg" data-url="${url}" title="${esc(RELICS[id].name)}"><img alt="" src="${url}">${counts[id] > 1 ? `<i>×${counts[id]}</i>` : ''}</button>`; }).join('')
-    || '<p class="empty-note">Aucune relique. Bats une créature pour gagner la première.</p>';
-  $('#deck-count').textContent = `L'Ossuaire compte ${94 + save.relics.length} âmes : 94 communes et ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}.`;
-  $('#deck').onclick = (e) => { const b = e.target.closest('.cg[data-url]'); if (b?.dataset.url) inspect(b.dataset.url); };
+  const ids = Object.keys(counts);
+  ids.forEach((id, k) => list.push({ card: relicCard(id), row: 2, col: k, per: Math.max(ids.length, 1), tip: `${RELICS[id].name}${counts[id] > 1 ? ' ×' + counts[id] : ''} · relique : brûle si l'adversaire la tire` }));
+  st.deckMode(list); st.setDeckCount(0);
+  $('#deck-count').textContent = `${94 + save.relics.length} âmes · ${save.ranks.length} visage${save.ranks.length > 1 ? 's' : ''} · ${save.relics.length} relique${save.relics.length > 1 ? 's' : ''}`;
+  $('#deck-tip').textContent = '';
+  dr.setPalette(PAL[z.place]);
   show('deck');
 }
-
-// ── PACTE & BESTIAIRE ───────────────────────────────────────
-function openCodex() {
-  $('#pacte').innerHTML = PACTE.map(([ic, n, d]) => `<div class="state"><div class="st-ic">${icon(ic)}</div><h3>${esc(n)}</h3><p>${esc(d)}</p></div>`).join('');
-  $('#bestiaire').innerHTML = FOES.map((f, i) => {
-    const b = BESTIAIRE['f' + i];
-    if (i > save.node) return `<div class="beast"><div class="arch" style="display:grid;place-items:center;font:400 90px var(--jac);color:var(--g2)">?</div><div class="nm">· · ·</div><div class="tt">${esc(zoneOf(i).name)}</div></div>`;
-    return `<div class="beast">
-      <div class="arch"><img alt="" src="${portrait(dr, 'f' + i, { palette: 'fange', w: 200, h: 128 })}"></div>
-      <div class="nm">${esc(b.name)}</div>
-      <div class="tt">${esc(b.title)}</div>
-      <div class="tx">${esc(b.text)}</div>
-      <div class="stats">${Object.entries(b.stats).map(([s, v]) => `<span>${s}</span><span class="bar">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= v ? 'on' : ''}"></i>`).join('')}</span>`).join('')}</div>
-      <div class="items">${b.items.map(([ic, n, d]) => `<div>${icon(ic)}<span>${esc(n)}<small>${esc(d)}</small></span></div>`).join('')}</div>
-      <div class="align"><span>Mal</span><span><i style="left:${b.align * 100}%"></i></span><span>Bien</span></div>
-    </div>`;
-  }).join('');
-  show('codex');
-}
+const ndc = (e) => { const r = canvas.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1]; };
+canvas.addEventListener('pointermove', (e) => {
+  if (current !== 'deck') return;
+  const m = play.stage.deckAt(...ndc(e));
+  play.stage.deckHover = m;
+  $('#deck-tip').textContent = m ? m.userData.deck.tip : '';
+  canvas.style.cursor = m && !m.userData.deck.locked ? 'zoom-in' : '';
+});
+canvas.addEventListener('click', (e) => {
+  if (current !== 'deck') return;
+  const m = play.stage.deckAt(...ndc(e));
+  if (m && !m.userData.deck.locked) inspect(faceURL(m.userData.deck.card));
+});
+play.onInspect = (card) => inspect(faceURL(card));
 
 // ── LE DUEL ──────────────────────────────────────────────────
 let session = null;
@@ -257,9 +224,10 @@ async function startDuel(n) {
   const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
   const players = [{ id: 'you', name: 'Pèlerin', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', persona: 'f' + n, score: oppStart }];
   const controllers = { you: { decide: () => play.askDecision(), chooseTarget: (s, pid, kind, c) => play.askTarget(kind, c) }, foe: makeAI(null, { risk: foe.risk }) };
-  const match = new Match({ players, controllers, target, dealer: 1, extra: save.relics.map(relicCard), presenter: (ev, snap) => play.present(ev, snap) });
+  const match = new Match({ players, controllers, target, dealer: 1, extra: save.relics.map(relicCard), presenter: async (ev, snap) => { while (paused) await wait(120); await play.present(ev, snap); } });
   session = { match, n };
   play.showRisk = true; play.stage.speed = 1; play.gate = true;
+  setPause(false);
   play.onGameOver = (ev) => { if (session?.match !== match) return; session = null; if (ev.winner === 'you') victory(n, match.players.find((p) => p.id === 'you').score); else defeat(n); };
   play.stage.crypt.setZone(zone.place);
   play.stage.setDealer(j < 3 ? 'f' + (z * 4 + 3) : null);
@@ -278,14 +246,25 @@ function leave() {
   sound.stopMusic(); sound.startMusic('menu');
   openMenu();
 }
-$('#g-quit').onclick = () => { sound.play('click'); if (confirmFlee()) leave(); };
-let fleeArmed = 0;
-function confirmFlee() { // deux clics pour fuir : la porte clignote
-  const b = $('#g-quit');
-  if (Date.now() - fleeArmed < 2500) return true;
-  fleeArmed = Date.now(); b.classList.add('blink'); setTimeout(() => b.classList.remove('blink'), 2500);
-  return false;
+let paused = false;
+function setPause(v) {
+  paused = v;
+  $('#pause-menu').classList.toggle('hidden', !v);
+  if (!v || !session) return;
+  const snap = session.match.snapshot(), foe = FOES[session.n], T = snap.target;
+  $('#pz-info').textContent = `${zoneOf(session.n).name} · ${foe.name} · manche ${snap.round || 1} · premier à ${T}`;
+  $('#pz-rows').innerHTML = snap.players.map((p) => `<li class="${p.id === 'you' ? 'me' : ''}"><span class="r-name">${p.id === 'you' ? 'Toi' : esc(foe.name)}</span><span class="gauge big"><i class="g1" style="width:${Math.min(100, p.score / T * 100)}%"></i><i class="g2" style="left:${Math.min(100, p.score / T * 100)}%;width:${Math.max(0, Math.min(100 - p.score / T * 100, (p.status === 'bust' ? 0 : p.hand) / T * 100))}%"></i></span><b class="r-tot">${p.score}${p.hand && p.status !== 'bust' ? ' +' + p.hand : ''}</b></li>`).join('');
+  $('#pz-deck').textContent = `L'Ossuaire : ${snap.deckCount} âmes · la Fosse : ${snap.discard.length}`;
+  updateSound();
 }
+$('#pause').onclick = () => { sound.play('click'); setPause(!paused); };
+$('#pause-menu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-p]'); if (!b) return;
+  sound.play('click');
+  if (b.dataset.p === 'resume') setPause(false);
+  if (b.dataset.p === 'sound') { sound.setMuted(!sound.muted); updateSound(); }
+  if (b.dataset.p === 'flee') { setPause(false); leave(); }
+});
 
 // ── LE BUTIN ─────────────────────────────────────────────────
 function victory(n, score) {
@@ -333,6 +312,10 @@ function defeat(n) {
 }
 $('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); openMenu(); };
 
-addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#cardview').classList.add('hidden'); });
-window.__vii = { get save() { return save; }, victory, defeat, startDuel, openDeck, openRoute, openMenu };
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#cardview').classList.contains('hidden')) { $('#cardview').classList.add('hidden'); return; }
+  if (current === 'game' && session) setPause(!paused);
+});
+window.__vii = { get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause };
 boot();

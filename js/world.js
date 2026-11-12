@@ -379,7 +379,30 @@ export function buildCrypt(scene) {
     th.add(at(box(0.9, 0.45, 0.7, M.stone), 0, 0.75, 0)); th.add(at(box(1.0, 2.4, 0.2, M.stone), 0, 1.9, -0.35)); th.add(at(cone(0.2, 0.8, M.stone, 4), 0, 3.4, -0.35));
     for (const s of [-1, 1]) { th.add(at(cyl(0.07, 0.09, 3, M.stone, 6), s * 0.5, 1.5, -0.35)); th.add(at(makeSkull(1.6), s * 0.5, 1.1, 0.2)); }
   }
+  // ambiances vivantes : lucioles (forêt), pluie (pont), braises (château)
+  const AN = 260, apos = new Float32Array(AN * 3), avel = new Float32Array(AN * 3);
+  const ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.BufferAttribute(apos, 3));
+  const amb2 = new THREE.Points(ag, new THREE.PointsMaterial({ color: 0xffffff, size: 0.02 })); room.add(amb2);
+  const rainG = new THREE.BufferGeometry(), rpos = new Float32Array(AN * 6); rainG.setAttribute('position', new THREE.BufferAttribute(rpos, 3));
+  const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: 0xc8d0d8 })); room.add(rain);
+  let azone = 'chateau';
+  const seed = (i) => { apos[i * 3] = (Math.random() - 0.5) * 7; apos[i * 3 + 1] = Math.random() * 4.5; apos[i * 3 + 2] = -1.2 + (Math.random() - 0.5) * 7; avel[i * 3] = (Math.random() - 0.5) * 0.2; avel[i * 3 + 1] = azone === 'chateau' ? 0.15 + Math.random() * 0.3 : azone === 'pont' ? -(5 + Math.random() * 2) : (Math.random() - 0.5) * 0.15; avel[i * 3 + 2] = (Math.random() - 0.5) * 0.2; };
+  for (let i = 0; i < AN; i++) seed(i);
+  const tickAmb = (t, dt) => {
+    for (let i = 0; i < AN; i++) {
+      apos[i * 3] += (avel[i * 3] + (azone === 'foret' ? Math.sin(t * 0.7 + i) * 0.15 : 0)) * dt;
+      apos[i * 3 + 1] += avel[i * 3 + 1] * dt; apos[i * 3 + 2] += avel[i * 3 + 2] * dt;
+      if (apos[i * 3 + 1] < 0 || apos[i * 3 + 1] > 4.6 || Math.abs(apos[i * 3]) > 4) { seed(i); apos[i * 3 + 1] = azone === 'pont' ? 4.5 : azone === 'chateau' ? 0.2 : Math.random() * 3; }
+      if (azone === 'pont') { const j = i * 6; rpos[j] = apos[i * 3]; rpos[j + 1] = apos[i * 3 + 1]; rpos[j + 2] = apos[i * 3 + 2]; rpos[j + 3] = apos[i * 3] - 0.02; rpos[j + 4] = apos[i * 3 + 1] + 0.18; rpos[j + 5] = apos[i * 3 + 2]; }
+    }
+    ag.attributes.position.needsUpdate = true; rainG.attributes.position.needsUpdate = true;
+    if (azone === 'foret') amb2.material.size = 0.02 + Math.sin(t * 3) * 0.006;
+  };
   const setZone = (z) => {
+    azone = z;
+    amb2.visible = z !== 'pont'; rain.visible = z === 'pont';
+    amb2.material.color.set(z === 'foret' ? 0xffd070 : 0xff7a2a); amb2.material.size = z === 'foret' ? 0.022 : 0.016;
+    for (let i = 0; i < AN; i++) seed(i);
     for (const k in zones) zones[k].visible = k === z;
     for (const w of walls) w.visible = z !== 'foret';
     scene.fog.color.set(z === 'foret' ? 0x0a0e0a : 0x000000);
@@ -391,6 +414,7 @@ export function buildCrypt(scene) {
     tick(t) {
       flames.forEach((f) => f.userData.flicker(t));
       for (const k in zones) if (zones[k].visible) zones[k].userData.tick?.(t);
+      tickAmb(t, Math.min(0.05, t - (this._lt ?? t))); this._lt = t;
       const p = dg.attributes.position;
       for (let i = 0; i < n; i++) { let y = p.getY(i) - 0.0015; if (y < 0.85) y = 3.4; p.setY(i, y); p.setX(i, p.getX(i) + Math.sin(t + i) * 0.0004); }
       p.needsUpdate = true;
