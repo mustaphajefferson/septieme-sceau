@@ -68,3 +68,46 @@ export const LORE = [
   { title: 'Elle règne sous les douves', text: "Elle s'est jetée du haut des remparts le jour du sacre. Elle porte encore la couronne et l'eau qui coule de son voile ne sèche jamais.", stats: { Avidité: 2, Ruse: 5, Foi: 3, Volonté: 3 }, align: 0.45, items: [['seal', 'Couronne mouillée', 'Elle pèse comme une pierre.'], ['skull', 'Collier de crânes', 'Ses prétendants.']], say: { bust: 'Noie-toi.', win: 'Viens sous l\'eau.', stay: 'Si tôt ?', taunt: 'Plonge.' } },
   { title: 'Le dernier boss : il a perdu son royaume aux cartes', text: "Il a tout misé, une nuit, et tout perdu sauf la couronne. Depuis il rejoue, encore et encore, pour la reprendre à qui l'emporte.", stats: { Avidité: 5, Ruse: 5, Foi: 2, Volonté: 5 }, align: 0.15, items: [['seal', 'Couronne brisée', 'Il manque une pointe.'], ['skull', 'Sceptre de fémur', 'Le sien.']], say: { bust: 'À genoux.', win: 'Le royaume est à moi.', stay: 'Le roi attend.', taunt: 'Mise ton âme.' } },
 ];
+
+// ─────────────────────────────────────────────────────────────
+//  Parcours II — le Squelette, au royaume des morts.
+// ─────────────────────────────────────────────────────────────
+export const ZONES2 = [
+  { id: 'limbes', name: 'Les Limbes', place: 'limbes' },
+  { id: 'styx', name: 'Le Fleuve noir', place: 'styx' },
+  { id: 'cathedrale', name: "La Cathédrale d'Os", place: 'cathedrale' },
+];
+export const FOES2 = [
+  { name: "L'Âme errante", risk: 0.3, kit: { body: 'robe', head: 'ghost', hands: 'bony' } },
+  { name: 'Le Médecin de peste', risk: 0.26, kit: { body: 'robe', head: 'plague', extras: ['lantern'] } },
+  { name: 'La Pleureuse', risk: 0.33, kit: { body: 'robe', head: 'hag', hands: 'bony', extras: ['skulls'] } },
+  { name: 'Le Gardien des Limbes', risk: 0.34, boss: true, kit: { head: 'horns', pauldrons: 'loup', hands: 'bony', sword: 'bourreau' } },
+  { name: 'Le Noyé', risk: 0.28, kit: { body: 'bare', head: 'skull', hands: 'bony', extras: ['noose'] } },
+  { name: "La Sirène d'os", risk: 0.31, kit: { body: 'robe', head: 'veil', hands: 'bony' } },
+  { name: "Le Pêcheur d'âmes", risk: 0.35, kit: { body: 'gambeson', head: 'ferry', hands: 'bony', extras: ['crozier'] } },
+  { name: 'Le Passeur', risk: 0.37, boss: true, kit: { body: 'robe', head: 'ferry', hands: 'bony', extras: ['lantern'] } },
+  { name: 'Le Moine sans visage', risk: 0.24, kit: { body: 'robe', head: 'exec', hands: 'bony' } },
+  { name: 'Le Chantre des cryptes', risk: 0.3, kit: { body: 'robe', head: 'mitre', hands: 'bony', extras: ['crozier', 'skulls'] } },
+  { name: 'Le Chevalier creux', risk: 0.4, kit: { head: 'helm', sword: 'bourreau', shield: 1 } },
+  { name: 'La Mort', risk: 0.34, boss: true, kit: { body: 'robe', head: 'death', hands: 'bony', extras: ['scythe'] } },
+];
+export const LORE2 = [
+  { say: { bust: 'Encore un peu…', win: 'Reste avec moi.', stay: 'Déjà ?', taunt: "Je ne me rappelle plus mon nom. Et toi ?" } },
+  { say: { bust: 'Contagieux.', win: 'Le remède, c\'est moi.', stay: 'Prudent.', taunt: 'Montre-moi tes cartes. Je vais les ausculter.' } },
+  { say: { bust: 'Je pleurerai pour toi.', win: 'Encore des larmes.', stay: 'Si tôt…', taunt: 'Chaque carte que tu tires, je la pleure.' } },
+  { say: { bust: 'Retourne dans la cendre.', win: 'Les Limbes te gardent.', stay: 'Lâche.', taunt: 'Personne ne sort des Limbes sans jouer.' } },
+  { say: { bust: 'Coule.', win: 'Glou.', stay: 'Hm.', taunt: "L'eau est froide. Les cartes aussi." } },
+  { say: { bust: 'Viens au fond.', win: 'Tu chantes faux.', stay: 'Reste.', taunt: 'Écoute-moi… et tire.' } },
+  { say: { bust: 'Ferré !', win: 'Belle prise.', stay: 'Il a vu l\'hameçon.', taunt: 'Je pêche des âmes. Les squelettes, je les relâche… parfois.' } },
+  { say: { bust: 'Pas d\'obole, pas de rive.', win: 'La traversée est payée.', stay: 'Tu as peur de l\'eau ?', taunt: 'Une carte pour monter. Toutes pour descendre.' } },
+  { say: { bust: '…', win: '…', stay: '…', taunt: '…' } },
+  { say: { bust: 'Requiem.', win: 'Amen.', stay: 'Silence.', taunt: 'Je chante pour les morts. Tu es déjà dans le chœur.' } },
+  { say: { bust: 'Vide, comme moi.', win: 'Rien dedans.', stay: 'Creux.', taunt: "Mon armure est vide. Ta main l'est-elle aussi ?" } },
+  { say: { bust: 'Tout finit ainsi.', win: "C'est l'heure.", stay: 'Tu repousses l\'inévitable.', taunt: 'Je tiens la banque depuis le premier jour.' } },
+];
+export const HERO2 = { body: 'robe', head: 'skull', hands: 'bony' };
+
+export const CAMPAIGNS = [
+  { id: 'chevalier', hero: 'Le Chevalier', heroKind: 'pelerin', hands: 'gant', persona: 'f', zones: ZONES, foes: FOES, deck: 0, deckName: 'Le deck du chevalier' },
+  { id: 'squelette', hero: 'Le Squelette', heroKind: 'h2', hands: 'os', persona: 's', zones: ZONES2, foes: FOES2, deck: 1, deckName: 'Le deck du squelette' },
+];

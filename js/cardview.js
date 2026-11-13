@@ -4,7 +4,7 @@
 //  reflet irisé, tramé lui aussi, court sur le papier et fait
 //  chatoyer les encres rouille et or.
 // ─────────────────────────────────────────────────────────────
-import { CW, CH, NAMES, cardFace, compose, LUT, backCanvas } from './cardart.js';
+import { CW, CH, NAMES, DECKS, cardFace, compose, LUT, backCanvas } from './cardart.js';
 import { bayer, abgr } from './dots.js';
 
 const IRI = ['#ff6a3c', '#ffc23c', '#a8e05a', '#3cd0b4', '#6f9cff', '#e070d0'].map((h) => abgr(h));
@@ -52,13 +52,13 @@ export class CardView {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const dx = x - W / 2, dy = y - H * 0.48; this.rang[y * W + x] = Math.atan2(dy, dx); this.rrad[y * W + x] = Math.hypot(dx, dy) / m; }
   }
   /** v : rang · plain : carte sans gravure · reward : mise en scène du butin (titre, rayons, bouton) */
-  open(v, { plain = false, reward = null, onDone = null, nav = null, dir = 0 } = {}) {
-    this.face = cardFace(v, plain); this.reward = reward; this.onDone = onDone; this.nav = reward ? null : nav; this.v = v;
+  open(v, { plain = false, reward = null, onDone = null, nav = null, dir = 0, deck = this.deck || 0 } = {}) {
+    this.deck = deck; this.face = cardFace(v, plain, deck); const N = DECKS[deck]?.names || NAMES; this.reward = reward; this.onDone = onDone; this.nav = reward ? null : nav; this.v = v;
     this.root.classList.toggle('navs', !!this.nav);
-    this.root.querySelector('.cv-back').src = backCanvas().toDataURL();
+    this.root.querySelector('.cv-back').src = backCanvas(deck).toDataURL();
     this.root.querySelector('.cv-head h2').textContent = reward?.title || '';
     this.root.querySelector('.cv-head p').textContent = reward?.sub || '';
-    this.root.querySelector('.cv-cap').textContent = reward ? '' : (plain ? `Rang ${v} · gravure à gagner` : `${NAMES[v]} · rang ${v}`) + ' — incline la carte';
+    this.root.querySelector('.cv-cap').textContent = reward ? '' : (plain ? `Rang ${v} · gravure à gagner` : `${N[v]} · rang ${v}`) + ' — incline la carte';
     this.btn.classList.toggle('hidden', !reward); this.btn.querySelector('span').textContent = reward?.button || 'Continuer';
     this.root.classList.toggle('reward', !!reward);
     this.root.classList.remove('hidden');
@@ -70,7 +70,7 @@ export class CardView {
   }
   close() { this.open_ = false; this.root.classList.add('hidden'); }
   /** carte voisine (nav(v, dir) → { v, plain } ou null) */
-  step(dir) { const n = this.nav?.(this.v, dir); if (n) { this.onStep?.(); this.open(n.v, { plain: n.plain, nav: this.nav, dir }); } }
+  step(dir) { const n = this.nav?.(this.v, dir); if (n) { this.onStep?.(); this.open(n.v, { plain: n.plain, nav: this.nav, dir, deck: this.deck }); } }
 
   frame(t, dt) {
     if (!this.open_) return;
@@ -81,7 +81,7 @@ export class CardView {
     const tx = this.tx, ty = this.ty;
     this.tilt.style.setProperty('--ry', (tx * 17).toFixed(2) + 'deg'); this.tilt.style.setProperty('--rx', (-ty * 13).toFixed(2) + 'deg');
     this.tilt.style.setProperty('--sx', (-tx * 16).toFixed(1) + 'px'); this.tilt.style.setProperty('--sy', (14 - ty * 10).toFixed(1) + 'px');
-    const { codes, buf } = this;
+    const { codes, buf } = this, LUTd = this.face.lut || LUT;
     compose(this.face, codes, tx, ty, 8);
     // le reflet : une bande irisée qui traverse la carte quand on l'incline
     const gp = 0.5 + tx * 0.6 - ty * 0.22, ph = tx * 2.6 - ty * 1.5 + t * 0.05;
@@ -91,7 +91,7 @@ export class CardView {
         const q = codes[i], d = (x / CW) * 0.64 + dy, b = bayer(x, y);
         const g = 1 - Math.abs(d - gp) * 4.6;                                  // intensité du reflet (≤ 0 hors de la bande)
         const h = ((((d * 3.2 + ph) % 1) + 1) % 1 * 6) | 0;                    // teinte, le long de la diagonale
-        let col = LUT[q];
+        let col = LUTd[q];
         if (q >= 3) { const s = Math.sin((d * 6 + ph * 2.2) * 6.2832); if ((s - 0.15) * 70 > b) col = IRI[h]; if (g > 0.75) col = WHITE; } // encres rouille et or : feuille irisée
         else if (g > 0) { if (q === 2) { if (g > 0.9) col = WHITE; else if (g * 30 > b) col = PALE[h]; } else if (g * 20 > b) col = DEEP[h]; }
         buf[i] = col;

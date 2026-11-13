@@ -127,6 +127,10 @@ body.veiled #app, body.veiled #app * { pointer-events: none !important; }
 .next small { font: 700 17px/1 var(--body); letter-spacing: .1em; color: var(--c3); }
 .next b { font: 700 clamp(26px, 3vw, 34px)/1.05 var(--body); color: var(--c4); }
 .next span { font: 500 19px/1 var(--body); color: var(--c4); }
+.camps { display: flex; gap: calc(var(--u) * 3); }
+.chipb { font: 700 18px/1 var(--body); color: var(--c4); background: var(--c0); padding: 5px 12px 7px; box-shadow: 0 0 0 var(--u) var(--c2); }
+.chipb.on { color: var(--c0); background: var(--c4); box-shadow: 0 0 0 var(--u) var(--c4); }
+.chipb:hover:not(.on) { box-shadow: 0 0 0 var(--u) var(--c4); }
 .two { display: flex; gap: calc(var(--u) * 6); justify-content: center; }
 #menu.on .t-head .logo, #menu.on .seuil > * { animation: unroll .8s steps(7) .45s both; }
 #menu.on .two { animation-delay: .75s; }

@@ -15,6 +15,10 @@ export const PALETTES = {
   // couverture : sarcelle, os, rouille
   rouille: { ramp: ['#09090a', '#12302d', '#3f7a69', '#c9b892', '#efe4c8'], warm: ['#220a05', '#8a2b14', '#e2643a', '#f7b57e'] },
   // sang : profanation
+  // parcours II — cendre violette, fleuve d'encre, os et sang
+  cendre:  { ramp: ['#08070a', '#27222d', '#5e5668', '#a89eb4', '#ebe6ef'], warm: ['#12060a', '#5a1a2a', '#c23a50', '#f2a4ae'] },
+  styx:    { ramp: ['#03070a', '#0b2530', '#1f5c66', '#72b6aa', '#dcf0e8'], warm: ['#0a0604', '#3d2c10', '#cfa444', '#f6de94'] },
+  os:      { ramp: ['#0c0806', '#3b2519', '#7c5437', '#caad86', '#f3e7ce'], warm: ['#140404', '#6c0f10', '#cf2424', '#ff8e5e'] },
   sang:    { ramp: ['#0a0303', '#3a0d0a', '#8a2416', '#d8613c', '#f2dcc0'], warm: ['#0a0303', '#8a2416', '#e2643a', '#f6c08a'] },
 };
 

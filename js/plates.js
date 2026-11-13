@@ -256,3 +256,89 @@ PLATES.tombe = (L, r) => {
   L.main((c) => { land(c, [[-12, 214], [70, 206], [130, 210], [204, 204]], { fill: K, stroke: P, lw: 1 }); shape(c, [[50, 214], [64, 200], [130, 200], [144, 214]], { fill: tone(50), stroke: P, lw: 1 }); for (let i = 0; i < 10; i++) disc(c, 60 + r() * 76, 206 + r() * 10, 1.5 + r() * 2, P); });
   L.near((c) => { hand(c, 96, 236, 1.1, 0.06, { bony: true, spread: 1.5 }); cardShape(c, 114, 128, 30, 44, 0.3, '0'); grass(c, r, 256, { n: 50, col: P, h: 10 }); });
 };
+export { hand, bigSkull, crown, arch, bars, seal, glow, cardShape, column, hanged };
+
+// ═════════════════════════════════════════════════════════════
+//  Parcours II — le Squelette
+// ═════════════════════════════════════════════════════════════
+function robeFig(c, x, y, s, { flip = 1, lantern = false, pole = false, scythe = false, skullFace = false } = {}) { // silhouette encapuchonnée, (x, y) = les pieds
+  c.save(); c.translate(x, y); c.scale(s * flip, s);
+  if (pole) seg(c, 14, -100, 22, 30, 2.4, K);
+  if (scythe) { seg(c, -16, 10, -20, -120, 2.6, P); shape(c, [[-20, -120], [10, -128], [40, -116], [56, -98], [34, -108], [8, -114], [-18, -112]], { fill: P, lw: 1 }); }
+  const robe = [[-15, 0], [-18, -30], [-13, -60], [-8, -76], [-2, -82], [7, -82], [12, -73], [14, -58], [18, -30], [16, 0]];
+  shape(c, robe, { fill: K, stroke: P, lw: 1.3 });
+  inside(c, pathOf(robe), () => hatch(c, 5, -84, 16, 86, { ang: 1.15, gap: 2.2, col: P }));
+  c.beginPath(); c.ellipse(2, -70, 6, 8, 0, 0, TAU); c.fillStyle = skullFace ? P : K; c.fill(); c.strokeStyle = P; c.lineWidth = 1; c.stroke();
+  if (skullFace) { disc(c, 0, -71, 1.6, K); disc(c, 4.5, -71, 1.6, K); seg(c, -1, -65, 5, -65, 1, K); } else { disc(c, 0, -71, 1.1, G); disc(c, 4.5, -71, 1.1, G); }
+  if (lantern) { seg(c, 12, -50, 22, -42, 2.5, K); seg(c, 22, -42, 22, -36, 1, P); shape(c, [[18, -36], [26, -36], [27, -24], [17, -24]], { fill: G, lw: 1.2, smooth: false }); }
+  c.restore();
+}
+function skeletonBack(c, x, y, s) { // le squelette de dos, (x, y) = les pieds
+  c.save(); c.translate(x, y); c.scale(s, s);
+  for (const sx of [-1, 1]) { seg(c, sx * 4, 0, sx * 5, -30, 2.6, P); seg(c, sx * 5, -30, sx * 6, -52, 2.6, P); disc(c, sx * 5, -30, 1.8, P); }
+  shape(c, [[-9, -50], [9, -50], [7, -56], [-7, -56]], { fill: P, lw: 1, smooth: false });
+  seg(c, 0, -56, 0, -82, 2.2, P); for (let i = 0; i < 5; i++) { const y0 = -60 - i * 4.5; line(c, [[-11 + i, y0 + 2], [-1, y0], [1, y0], [11 - i, y0 + 2]], 1.4, P); }
+  seg(c, -12, -84, 12, -84, 2, P);
+  for (const sx of [-1, 1]) { line(c, [[sx * 12, -84], [sx * 16, -64], [sx * 18, -46]], 2.2, P); }
+  disc(c, 0, -94, 8.5, P, 1.2); disc(c, 0, -90, 5, tone(200));
+  c.restore();
+}
+// — intro II : la Mort, au loin, sous la lune —
+PLATES.mortloin = (L, r) => {
+  L.bg((c) => { skyNight(c, r, { glow: 60, y0: 150, stars: 90 }); disc(c, 96, 96, 62, P); disc(c, 96, 96, 62, null, 1.5, K); for (let i = 0; i < 5; i++) seg(c, 40, 74 + i * 12, 152, 74 + i * 12, 1, tone(190)); });
+  L.far((c) => { land(c, [[-12, 196], [50, 178], [96, 168], [142, 178], [204, 194]], { fill: K, stroke: P, lw: 1 }); });
+  L.main((c) => { robeFig(c, 96, 172, 0.9, { scythe: true, skullFace: true }); for (let i = 0; i < 9; i++) { const x = 4 + i * 23; shape(c, [[x - 5, 230], [x - 5, 212], [x, 206], [x + 5, 212], [x + 5, 230]], { fill: tone(70), stroke: P, lw: 1, smooth: false }); } c.fillStyle = K; c.fillRect(-B, 228, WW + 2 * B, 40); });
+  L.near((c) => { tree(c, 186, 256, 100, r, { lean: -0.3, lw: 6, depth: 3 }); });
+  L.extra(0.32, 'eyes', (c) => { disc(c, 95, 108, 1.5, G); disc(c, 99, 108, 1.5, G); glow(c, r, 97, 108, 10, 50, G); });
+  L.pop((c) => { bat(c, 30, 60, 0.7, 0.3); bat(c, 60, 34, 0.5, -0.2); });
+};
+// — Les Limbes : la plaine de cendre, la porte blanche au loin —
+PLATES.limbes = (L, r) => {
+  L.bg((c) => { full(c, tone(70)); halo(c, 96, 110, 4, 90, 240, 70); });
+  L.far((c) => { shape(c, [[78, 150], [78, 92], [96, 78], [114, 92], [114, 150]], { fill: P, lw: 1.5, smooth: false }); for (const x of [70, 122]) shape(c, [[x - 6, 150], [x - 6, 84], [x + 6, 84], [x + 6, 150]], { fill: tone(110), stroke: K, lw: 1, smooth: false }); land(c, [[-12, 150], [204, 150]], { fill: tone(40), lw: 0 }); });
+  L.main((c) => { shape(c, [[90, 150], [102, 150], [150, 256], [42, 256]], { fill: tone(150), lw: 0, smooth: false }); for (let i = 0; i < 12; i++) { const x = r() * 192, y = 156 + r() * 70, s = 0.6 + r() * 0.6; if (x > 70 && x < 120) continue; shape(c, [[x - 5 * s, y], [x - 5 * s, y - 14 * s], [x, y - 19 * s], [x + 5 * s, y - 14 * s], [x + 5 * s, y]], { fill: tone(90), stroke: K, lw: 1, smooth: false }); } tree(c, 20, 200, 110, r, { lean: 0.2, lw: 5, depth: 3 }); tree(c, 176, 190, 100, r, { lean: -0.2, lw: 5, depth: 3 }); });
+  L.near((c) => { skeletonBack(c, 92, 250, 1.3); });
+};
+// — Le Fleuve noir : la barque du passeur —
+PLATES.barque = (L, r) => {
+  L.bg((c) => { skyNight(c, r, { glow: 60, y0: 120, stars: 40 }); disc(c, 46, 50, 13, P); });
+  L.far((c) => { for (const sd of [-1, 1]) shape(c, [[96 + sd * 108, 150], [96 + sd * 108, 30], [96 + sd * 66, 86], [96 + sd * 54, 150]], { fill: K, stroke: P, lw: 1, smooth: false }); c.fillStyle = K; c.fillRect(-B, 150, WW + 2 * B, 120); shape(c, [[84, 150], [84, 120], [96, 110], [108, 120], [108, 150]], { fill: G, lw: 0, smooth: false }); });
+  L.main((c) => { for (let i = 0; i < 46; i++) { const y = 156 + r() * 96, x = -10 + r() * 200; seg(c, x, y, x + 6 + r() * 24, y, 1, tone(150)); } const hull = [[30, 196], [150, 192], [138, 212], [40, 214]]; shape(c, hull, { fill: tone(70), stroke: P, lw: 1.4, smooth: false }); robeFig(c, 120, 194, 1, { pole: true, lantern: true }); skeletonBack(c, 62, 200, 0.62); });
+  L.extra(0.32, 'lamp', (c) => { glow(c, r, 145, 164, 24, 200, G); });
+};
+// — La Cathédrale d'Os —
+PLATES.cathedrale = (L, r) => {
+  const vx = 96, vy = 110;
+  L.bg((c) => { full(c); disc(c, vx, 70, 34, R, 2, P); for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; seg(c, vx, 70, vx + Math.cos(a) * 34, 70 + Math.sin(a) * 34, 1.5, K); } disc(c, vx, 70, 10, G, 1.5, K); });
+  L.far((c) => { for (let k = 0; k < 4; k++) { const d = 1 - k * 0.2; for (const sx of [-1, 1]) { const x = vx + sx * (30 + (3 - k) * 26); for (let j = 0; j < 7; j++) skull(c, x, vy + 100 * d - j * 15 * d, 0.6 * d + 0.3); } } });
+  L.main((c) => { c.fillStyle = tone(50); c.beginPath(); c.moveTo(-B, 256); c.lineTo(vx - 20, vy + 40); c.lineTo(vx + 20, vy + 40); c.lineTo(WW + B, 256); c.fill(); for (let i = -6; i <= 6; i++) seg(c, vx + i * 4, vy + 40, vx + i * 32, 256, 1, P); shape(c, [[vx - 6, vy + 40], [vx + 6, vy + 40], [vx + 30, 256], [vx - 30, 256]], { fill: R, lw: 1, smooth: false }); });
+  L.near((c) => { arch(c, -4, 256, 200, 252, { stones: 17, fill: tone(190) }); skeletonBack(c, 96, 252, 0.9); });
+};
+// — boss II : la Mort, de près —
+PLATES.mort = (L, r) => {
+  L.bg((c) => { full(c); halo(c, 96, 110, 20, 150, 90, 0); rays(c, 96, 110, 80, 160, 60, { col: P, alt: 0.5 }); });
+  L.far((c) => { seg(c, 170, 256, 176, -10, 4, P); const bl = [[176, -6], [120, -14], [62, 6], [34, 36], [80, 18], [130, 12], [174, 18]]; shape(c, bl, { fill: P, lw: 2 }); shade(c, bl, 30, -14, 150, 52, { ang: 0.3, gap: 3 }); });
+  L.main((c) => { const hood = [[-12, 256], [6, 150], [30, 60], [96, 18], [162, 60], [186, 150], [204, 256]]; shape(c, hood, { fill: K, stroke: P, lw: 1.6 }); bigSkull(c, 96, 128, 1.2); });
+  L.near((c) => { crown(c, 96, 56, 1.4); hand(c, 40, 256, 1.1, 0.35, { bony: true, spread: 0.8 }); });
+  L.extra(0.35, 'eyes', (c) => { for (const sx of [-1, 1]) { disc(c, 96 + sx * 23, 112, 6, G); disc(c, 96 + sx * 23, 112, 2.4, P); } });
+};
+// — boss II : la table, deux mains d'os —
+PLATES.duel2 = (L, r) => {
+  L.bg((c) => { full(c); halo(c, 96, 120, 10, 160, 150, 0); burst(c, 96, 120, 40, 220, 24, tone(120), 0, 0.12); });
+  L.far((c) => { shape(c, [[-12, 170], [30, 140], [96, 132], [162, 140], [204, 170], [204, 256], [-12, 256]], { fill: tone(60), stroke: P, lw: 1.5 }); hatch(c, -12, 132, 216, 124, { ang: 0.15, gap: 6 }); });
+  L.main((c) => { for (let i = 0; i < 7; i++) cardShape(c, 40 + i * 19, 100 + Math.abs(i - 3) * 9, 26, 38, (i - 3) * 0.2, String([12, 6, 0, 7, 11, 2, 9][i])); });
+  L.near((c) => { hand(c, 20, 256, 1.1, 0.5, { bony: true }); hand(c, 172, 256, 1.1, -0.5, { bony: true }); });
+};
+// — fin II : la faux brisée —
+PLATES.faux = (L, r) => {
+  L.bg((c) => { full(c); halo(c, 96, 120, 10, 150, 130, 0); });
+  L.main((c) => { c.fillStyle = K; c.fillRect(-B, 196, WW + 2 * B, 70); seg(c, -B, 196, WW + B, 196, 1, P); seg(c, 20, 210, 100, 190, 4, P); seg(c, 112, 196, 176, 220, 4, P); const bl = [[176, 220], [150, 176], [110, 160], [80, 166], [120, 174], [150, 192]]; shape(c, bl, { fill: P, lw: 2 }); shade(c, bl, 76, 158, 104, 64, { ang: 0.4, gap: 3 }); });
+  L.near((c) => { crown(c, 60, 206, 0.8, true); c.save(); c.translate(132, 120); c.scale(0.7, 0.7); bigSkull(c, 0, 0, 1); c.restore(); });
+};
+// — fin II : le repos, à l'aube —
+PLATES.repos = (L, r) => {
+  L.bg((c) => { skyDay(c, r, 170, 5); disc(c, 96, 160, 46, P, 1.5); rays(c, 96, 160, 50, 130, 48, { alt: 0.55 }); });
+  L.far((c) => { land(c, [[-12, 180], [60, 170], [130, 176], [204, 168]], { fill: tone(110), stroke: K, lw: 1 }); cloud(c, 40, 100, 60, r); cloud(c, 160, 84, 52, r); });
+  L.main((c) => { tree(c, 150, 214, 130, r, { lean: -0.1, lw: 8, depth: 3 }); land(c, [[-12, 212], [80, 204], [204, 214]], { fill: K }); for (let i = 0; i < 24; i++) { const x = r() * 192, y = 208 + r() * 40; disc(c, x, y, 2, r() > 0.5 ? R : P); } });
+  L.near((c) => { c.save(); c.translate(70, 222); c.rotate(-Math.PI / 2 + 0.06); skeletonBack(c, 0, 0, 0.75); c.restore(); grass(c, r, 256, { n: 70, col: P, h: 12 }); });
+};

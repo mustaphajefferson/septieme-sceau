@@ -11,10 +11,11 @@ import { sound } from './audio.js';
 import { Match } from './game.js';
 import { makeAI } from './ai.js';
 import { icon } from './icons.js';
-import { ZONES, FOES, PALIERS } from './content.js';
+import { PALIERS, CAMPAIGNS } from './content.js';
+import './cards2.js';
 import { loadDots, Veil } from './dots.js';
 import { setOwned, clearFaces } from './cardtex.js';
-import { NAMES, clearCards } from './cardart.js';
+import { DECKS, clearCards } from './cardart.js';
 import { CardView } from './cardview.js';
 import { installDotUI } from './dotui.js';
 import { wait } from './fx.js';
@@ -31,22 +32,35 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ── sauvegarde ───────────────────────────────────────────────
 const KEY = 'vii-save-4';
-const fresh = () => ({ ranks: [], node: 0, score: 0, seen: {} });
-let save = (() => { try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fresh(); } })();
+// un état par parcours ; save.camp = le parcours en cours (0 : le chevalier, 1 : le squelette)
+const cfresh = () => ({ ranks: [], node: 0, score: 0 });
+const fresh = () => ({ camp: 0, c: [cfresh()], seen: {} });
+let save = (() => {
+  try {
+    const o = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (o.ranks) return { camp: 0, c: [{ ranks: o.ranks, node: o.node || 0, score: o.score || 0 }], seen: { intro0: o.seen?.intro, boss0: o.seen?.boss } };
+    return { ...fresh(), ...o };
+  } catch { return fresh(); }
+})();
+const S = () => (save.c[save.camp] ||= cfresh());
+const C = () => CAMPAIGNS[save.camp];
+const FOE = new Proxy([], { get: (_, k) => C().foes[k] });
+const ZONE = new Proxy([], { get: (_, k) => C().zones[k] });
+const seen = (k) => save.seen?.[k + save.camp];
+const markSeen = (k) => { (save.seen ||= {})[k + save.camp] = 1; persist(); };
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { /* */ } };
 { // raccourcis de test : ?reset · ?jusqua=N
   const q = new URLSearchParams(location.search);
   if (q.has('reset')) { save = fresh(); persist(); }
-  if (q.has('jusqua')) { save = fresh(); const n = Math.min(12, +q.get('jusqua') || 0); for (let i = 0; i < n; i++) save.ranks.push(i + 1); save.node = n; save.seen = { intro: 1 }; persist(); }
+  if (q.has('jusqua') || q.has('parcours')) { save = fresh(); save.camp = q.get('parcours') === '2' ? 1 : 0; save.c[1] ||= cfresh(); const n = Math.min(12, +q.get('jusqua') || 0); for (let i = 0; i < n; i++) S().ranks.push(i + 1); S().node = n; save.seen = { intro0: 1, intro1: 1 }; persist(); }
 }
-const done = () => save.node >= 12;
-const owns = (v) => v === 0 || save.ranks.includes(v);
+const done = () => S().node >= 12;
+const owns = (v) => v === 0 || S().ranks.includes(v);
 const zoneIdx = (n) => Math.min(2, Math.floor(Math.min(n, 11) / 4));
-const zoneOf = (n) => ZONES[zoneIdx(n)];
-const PAL = { foret: 'fange', pont: 'rouille', chateau: 'velin' };
-// plusieurs decks viendront ; pour l'instant, celui du pèlerin (rangs 0 à 12)
-const DECKS = [{ id: 'pelerin', name: 'Le deck du pèlerin' }];
-setOwned(owns);
+const zoneOf = (n) => ZONE[zoneIdx(n)];
+const PAL = { foret: 'fange', pont: 'rouille', chateau: 'velin', limbes: 'cendre', styx: 'styx', cathedrale: 'os' };
+const NAMESc = () => DECKS[C().deck].names;
+setOwned(owns, () => C().deck);
 
 // ── icônes & curseur ─────────────────────────────────────────
 $$('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
@@ -66,7 +80,7 @@ const cardView = new CardView($('#cardview'));
 cardView.onStep = () => sound.play('flip');
 const rush = new Rush($('#rush'));
 const cine = new Cine($('#cine'));
-const story = () => STORY[0];
+const story = () => STORY[save.camp];
 const mouse = { x: 0, y: 0, sx: 0, sy: 0 };
 addEventListener('pointermove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
 const extScene = new THREE.Scene();
@@ -133,10 +147,10 @@ function show(id) {
   document.body.classList.toggle('framed', framed);
   if (veil.src) veil.setFrame(framed, framed ? 1400 : 700);
   goShot(id);
-  ext.setZone(zoneOf(save.node).place);
-  if (id !== 'game') dr.setPalette(id === 'death' ? 'sang' : PAL[zoneOf(save.node).place]);
+  ext.setZone(zoneOf(S().node).place);
+  if (id !== 'game') dr.setPalette(id === 'death' ? 'sang' : PAL[zoneOf(S().node).place]);
   if (id !== 'deck') play.stage.clearDeck();
-  ext.showPilgrim(id !== 'title');
+  ext.showPilgrim(id !== 'title' && save.camp === 0);
   $$('.screen').forEach((s) => { s.classList.toggle('on', s.id === id); s.classList.remove('leaving'); });
   requestAnimationFrame(placeGL);
   setTimeout(placeGL, 450);
@@ -161,7 +175,7 @@ async function go(fn, type = 'iris') {
 }
 // ── inspecter une carte : en grand, inclinable, irisée ──
 const cardNav = (v, d) => { const n = (v + d + 13) % 13; return { v: n, plain: !owns(n) }; };
-const inspect = (v) => { sound.play('flip'); cardView.open(v, { plain: !owns(v), nav: cardNav }); };
+const inspect = (v) => { sound.play('flip'); cardView.open(v, { plain: !owns(v), nav: cardNav, deck: C().deck }); };
 
 // ── ACCUEIL ──────────────────────────────────────────────────
 async function boot() {
@@ -174,7 +188,7 @@ async function boot() {
   for (const e of ['pointerdown', 'keydown', 'touchstart']) addEventListener(e, wake, true);
   await document.fonts.ready;
   const [fr] = await Promise.all([loadDots('art/cadre-racines.png'), ...['60px Jacquard', '700 30px Grenze', '500 20px Grenze'].map((f) => document.fonts.load(f).catch(() => {}))]);
-  clearCards(); clearFaces(); play.stage.refreshBack();
+  clearCards(); clearFaces(); play.stage.refreshBack(); play.stage.setHands(C().hands);
   veil.setSource(fr); veil.want = 0; veil.grow = 0;
   placeGL();
   veil.setFrame(current === 'title' || current === 'menu', 2800);   // les racines poussent depuis les coins…
@@ -194,37 +208,42 @@ async function enter() {
   sound.startMusic('menu');
   updateSound();
   veil.stir = 3; veil.tween('stir', 0, 2400);
-  if (!save.seen?.intro) { openMenu(); await cine.play(story().intro); (save.seen ||= {}).intro = 1; persist(); return; }
+  if (!seen('intro')) { openMenu(); await cine.play(story().intro); markSeen('intro'); return; }
   openMenu();
 }
 
 // ── LE SEUIL ─────────────────────────────────────────────────
 function openMenu() {
-  const n = Math.min(save.node, 11), z = zoneOf(save.node), j = n % 4;
+  const n = Math.min(S().node, 11), z = zoneOf(S().node), j = n % 4;
   $('#m-zone').textContent = z.name;
-  $('#m-foe').textContent = done() ? 'Le trône est vide' : FOES[n].name;
-  $('#m-tier').textContent = done() ? 'Rejouer le Roi déchu' : (FOES[n].boss ? 'Le maître des lieux · ' : '') + 'premier à ' + PALIERS[j];
+  $('#m-foe').textContent = done() ? (save.camp ? 'La Mort a perdu' : 'Le trône est vide') : FOE[n].name;
+  $('#m-tier').textContent = done() ? 'Rejouer ' + FOE[11].name : (FOE[n].boss ? 'Le maître des lieux · ' : '') + 'premier à ' + PALIERS[j];
+  // le choix du parcours, une fois le second ouvert
+  const cp = $('#m-camps'); cp.classList.toggle('hidden', save.c.length < 2);
+  cp.innerHTML = save.c.map((_, i) => `<button class="chipb${i === save.camp ? ' on' : ''}" data-c="${i}">${CAMPAIGNS[i].hero}</button>`).join('');
   show('menu');
 }
 $('#m-go').onclick = async () => {
   if (busy) return;
   sound.play('click');
-  const n = done() ? 11 : save.node;
-  if (n === 11 && !save.seen?.boss) { busy = true; await cine.play(story().boss); (save.seen ||= {}).boss = 1; persist(); busy = false; }
+  const n = done() ? 11 : S().node;
+  if (n === 11 && !seen('boss')) { busy = true; await cine.play(story().boss); markSeen('boss'); busy = false; }
   startDuel(n);
 };
 $('#m-deck').onclick = () => { sound.play('click'); go(openDeck); };
+$('#m-camps').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b || +b.dataset.c === save.camp) return; sound.play('click'); go(() => { switchCamp(+b.dataset.c); openMenu(); }); });
+function switchCamp(i) { save.camp = i; S(); persist(); clearFaces(); play.stage.refreshBack(); play.stage.setHands(C().hands); }
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); go(openMenu); }));
 
 // ── LE DECK : étalé sur la table du lieu ─────────────────────
 function openDeck() {
-  const st = play.stage, z = zoneOf(save.node);
-  st.setPlayers([{ id: 'you', name: 'Pèlerin', kind: 'human' }], 'you');
+  const st = play.stage, z = zoneOf(S().node);
+  st.setPlayers([{ id: 'you', name: C().hero, kind: 'human' }], 'you');
   st.setDealer(null); st.crypt.setZone(z.place);
   const list = [];
-  for (let v = 0; v <= 12; v++) list.push({ card: { t: 'n', v, id: 'g' + v }, locked: !owns(v), tip: owns(v) ? `${NAMES[v]} · rang ${v} — ${Math.max(1, v)} dans le paquet` : `Rang ${v} — bats ${FOES[v - 1].name} pour gagner sa carte` });
+  for (let v = 0; v <= 12; v++) list.push({ card: { t: 'n', v, id: 'g' + v }, locked: !owns(v), tip: owns(v) ? `${NAMESc()[v]} · rang ${v} — ${Math.max(1, v)} dans le paquet` : `Rang ${v} — bats ${FOE[v - 1].name} pour gagner sa carte` });
   st.deckMode(list, (k) => { if (k % 2 === 0) sound.play('flip'); }); st.setDeckCount(0);
-  $('#deck-count').textContent = `${DECKS[0].name} · ${save.ranks.length} / 12 cartes gagnées`;
+  $('#deck-count').textContent = `${C().deckName} · ${S().ranks.length} / 12 cartes gagnées`;
   $('#deck-tip').textContent = 'Touche une carte pour la prendre en main';
   dr.setPalette(PAL[z.place]);
   show('deck');
@@ -258,10 +277,11 @@ async function startDuel(n) {
   await rush.to('flash', 1, 160);
   await veil.close('iris', 220);
   rush.k = 0;
-  const z = Math.floor(n / 4), j = n % 4, zone = ZONES[z];
-  const foe = FOES[n], target = PALIERS[j];
-  const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
-  const players = [{ id: 'you', name: 'Pèlerin', kind: 'human', score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', persona: 'f' + n, score: oppStart }];
+  const z = Math.floor(n / 4), j = n % 4, zone = ZONE[z];
+  const foe = FOE[n], target = PALIERS[j];
+  const myStart = j === 0 || done() ? 0 : S().score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
+  const players = [{ id: 'you', name: C().hero, kind: 'human', persona: C().heroKind, score: myStart }, { id: 'foe', name: foe.name, kind: 'ai', persona: C().persona + n, score: oppStart }];
+  play.stage.setHands(C().hands);
   const controllers = { you: { decide: () => play.askDecision(), chooseTarget: (s, pid, kind, c) => play.askTarget(kind, c) }, foe: makeAI(null, { risk: foe.risk }) };
   const match = new Match({ players, controllers, target, dealer: 1, extra: [], specials: false, presenter: async (ev, snap) => { while (paused) await wait(120); await play.present(ev, snap); } });
   session = { match, n };
@@ -279,7 +299,7 @@ async function startDuel(n) {
     busy = false; veil.open(800);
   };
   play.stage.crypt.setZone(zone.place);
-  play.stage.setDealer(j < 3 ? 'f' + (z * 4 + 3) : null);
+  play.stage.setDealer(j < 3 ? C().persona + (z * 4 + 3) : null);
   show('game');
   dr.setPalette(PAL[zone.place]);
   play.mount(match.snapshot(), 'you');
@@ -308,11 +328,11 @@ function setPause(v) {
   $('#pause-menu').classList.toggle('hidden', !v);
   $('#pause').classList.toggle('on', v);
   if (!v || !session) return;
-  const snap = session.match.snapshot(), foe = FOES[session.n], T = snap.target, pc = (x) => Math.max(0, Math.min(100, (x / T) * 100));
+  const snap = session.match.snapshot(), foe = FOE[session.n], T = snap.target, pc = (x) => Math.max(0, Math.min(100, (x / T) * 100));
   $('#pz-info').textContent = `${zoneOf(session.n).name} · manche ${snap.round || 1} · premier à ${T}`;
   $('#pz-rows').innerHTML = snap.players.map((p) => {
     const h = p.status === 'bust' ? 0 : p.hand;
-    return `<div class="pz-row${p.id === 'you' ? ' me' : ''}"><b>${p.id === 'you' ? 'Pèlerin' : esc(foe.name)}</b><em>${p.score}${h ? ' <small>+' + h + '</small>' : ''}</em><span class="gauge"><i class="g1" style="width:${pc(p.score)}%"></i><i class="g2" style="left:${pc(p.score)}%;width:${Math.min(100 - pc(p.score), pc(h))}%"></i></span></div>`;
+    return `<div class="pz-row${p.id === 'you' ? ' me' : ''}"><b>${p.id === 'you' ? C().hero : esc(foe.name)}</b><em>${p.score}${h ? ' <small>+' + h + '</small>' : ''}</em><span class="gauge"><i class="g1" style="width:${pc(p.score)}%"></i><i class="g2" style="left:${pc(p.score)}%;width:${Math.min(100 - pc(p.score), pc(h))}%"></i></span></div>`;
   }).join('');
   $('#pz-deck').textContent = `Dans le paquet : ${snap.deckCount} cartes · défaussées : ${snap.discard.length}`;
   updateSound();
@@ -328,21 +348,24 @@ $('#pause-menu').addEventListener('click', (e) => {
 
 // ── LE BUTIN : la carte gagnée ───────────────────────────────
 function victory(n, score) {
-  const j = n % 4, v = n + 1, isNew = !save.ranks.includes(v);
-  if (isNew) save.ranks.push(v);
-  if (!done()) save.score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
-  save.node = Math.max(save.node, n + 1);
+  const j = n % 4, v = n + 1, isNew = !S().ranks.includes(v);
+  if (isNew) S().ranks.push(v);
+  if (!done()) S().score = j === 3 ? 0 : Math.min(score, PALIERS[j] + Math.round((PALIERS[j + 1] - PALIERS[j]) * 0.5));
+  S().node = Math.max(S().node, n + 1);
   persist();
   clearFaces();
   sound.stopMusic(); sound.startMusic('menu');
   show('spoils');
-  const after = n === 11 ? ' Le trône est à toi.' : FOES[n].boss ? ` La route s'ouvre : ${ZONES[zoneIdx(n + 1)].name}.` : '';
+  const after = n === 11 ? (save.camp ? '' : ' Le trône est à toi.') : FOE[n].boss ? ` La route s'ouvre : ${ZONE[zoneIdx(n + 1)].name}.` : '';
   // après la carte : la cinématique du lieu suivant (ou la fin), puis l'accueil
-  const seq = n === 11 ? story().ending : FOES[n].boss ? story().zones[zoneIdx(n + 1)] : null;
-  cardView.open(v, { reward: { title: `${FOES[n].name} s'effondre`, sub: (isNew ? `Tu gagnes la carte ${NAMES[v]} (rang ${v}).` : `${NAMES[v]} · rang ${v}.`) + after }, onDone: async () => {
+  const seq = n === 11 ? story().ending : FOE[n].boss ? story().zones[zoneIdx(n + 1)] : null;
+  cardView.open(v, { reward: { title: `${FOE[n].name} s'effondre`, sub: (isNew ? `Tu gagnes la carte ${NAMESc()[v]} (rang ${v}).` : `${NAMESc()[v]} · rang ${v}.`) + after }, onDone: async () => {
     sound.play('click');
     if (!seq) return go(openMenu);
     openMenu(); await cine.play(seq);
+    if (n === 11 && save.camp === 0 && !save.c[1]) { // la fin du chevalier ouvre le parcours du squelette
+      save.c[1] = cfresh(); switchCamp(1); openMenu(); await cine.play(story().intro); markSeen('intro');
+    }
   } });
   setTimeout(() => sound.play('flip'), 500);
   setTimeout(() => sound.play('flip7'), 1000);
@@ -351,10 +374,10 @@ function victory(n, score) {
 // ── LA MORT ──────────────────────────────────────────────────
 function defeat(n) {
   const z = Math.floor(n / 4);
-  if (!done()) { save.node = z * 4; save.score = 0; persist(); }
+  if (!done()) { S().node = z * 4; S().score = 0; persist(); }
   sound.stopMusic();
-  $('#dt-img').src = portraitCanvas(dr, 'f' + n, { palette: 'sang', w: 200, h: 230 }).toDataURL();
-  $('#dt-lead').textContent = `${FOES[n].name} a gagné ta mise. Tu renais à l'orée : ${ZONES[z].name}. Les cartes gagnées te suivent.`;
+  $('#dt-img').src = portraitCanvas(dr, C().persona + n, { palette: 'sang', w: 200, h: 230 }).toDataURL();
+  $('#dt-lead').textContent = `${FOE[n].name} a gagné ta mise. Tu renais à l'orée : ${ZONE[z].name}. Les cartes gagnées te suivent.`;
   show('death');
 }
 $('#dt-go').onclick = () => { sound.play('click'); sound.startMusic('menu'); go(openMenu); };
@@ -367,7 +390,7 @@ addEventListener('keydown', (e) => {
 // ── outils de test ───────────────────────────────────────────
 function devJump(node) {
   if (session) { session.match.aborted = true; play.cancelPrompts(); session = null; }
-  save.node = Math.max(0, Math.min(12, node)); save.ranks = []; for (let i = 1; i <= save.node; i++) save.ranks.push(i); save.score = 0;
+  S().node = Math.max(0, Math.min(12, node)); S().ranks = []; for (let i = 1; i <= S().node; i++) S().ranks.push(i); S().score = 0;
   persist(); clearFaces();
   go(() => { play.closeOverlay(); cardView.close(); sound.startMusic('menu'); openMenu(); });
 }
@@ -376,19 +399,20 @@ if (DEV) {
   d.innerHTML = `<button data-d="open">dev</button><div class="dev-list hidden">
     <button data-d="win">Gagner ce duel</button><button data-d="next">Duel suivant</button><button data-d="zone">Lieu suivant</button>
     <button data-d="end">Boss final</button><button data-d="reset">Recommencer l'histoire</button>
-    <button data-d="c-intro">▶ Intro</button><button data-d="c-z1">▶ Pont-levis</button><button data-d="c-z2">▶ Château</button><button data-d="c-boss">▶ Boss final</button><button data-d="c-end">▶ Fin</button></div>`;
+    <button data-d="camp2">Parcours II</button><button data-d="c-intro">▶ Intro</button><button data-d="c-z1">▶ Pont-levis</button><button data-d="c-z2">▶ Château</button><button data-d="c-boss">▶ Boss final</button><button data-d="c-end">▶ Fin</button></div>`;
   document.body.appendChild(d);
   d.addEventListener('click', (e) => {
     const k = e.target.closest('[data-d]')?.dataset.d; if (!k) return;
     const list = d.querySelector('.dev-list');
     if (k === 'open') return list.classList.toggle('hidden');
     list.classList.add('hidden');
-    if (k === 'win') { if (session) { session.match.aborted = true; play.cancelPrompts(); play.onGameOver({ winner: 'you' }); } else devJump(save.node + 1); }
-    if (k === 'next') devJump(save.node + 1);
-    if (k === 'zone') devJump((Math.floor(save.node / 4) + 1) * 4);
+    if (k === 'win') { if (session) { session.match.aborted = true; play.cancelPrompts(); play.onGameOver({ winner: 'you' }); } else devJump(S().node + 1); }
+    if (k === 'next') devJump(S().node + 1);
+    if (k === 'zone') devJump((Math.floor(S().node / 4) + 1) * 4);
     if (k === 'end') devJump(11);
-    const S = story(), C = { 'c-intro': S.intro, 'c-z1': S.zones[1], 'c-z2': S.zones[2], 'c-boss': S.boss, 'c-end': S.ending };
-    if (C[k]) cine.play(C[k]);
+    const ST = story(), CI = { 'c-intro': ST.intro, 'c-z1': ST.zones[1], 'c-z2': ST.zones[2], 'c-boss': ST.boss, 'c-end': ST.ending };
+    if (CI[k]) cine.play(CI[k]);
+    if (k === 'camp2') { save.c[1] ||= cfresh(); go(() => { switchCamp(save.camp ? 0 : 1); openMenu(); }); }
     if (k === 'reset') { try { localStorage.removeItem(KEY); } catch { /* */ } location.href = location.pathname; }
   });
 }

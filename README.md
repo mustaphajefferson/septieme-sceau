@@ -7,12 +7,17 @@ La route mène de la Forêt des Pendus au Pont-levis puis au Château du Roi dé
 ## Écrans
 Accueil (cadre de racines, le lieu du prochain duel) → Continuer · Deck (le deck étalé sur la table, chaque carte s'inspecte) → la table (pause pour les infos) → le décompte de chaque manche → la carte gagnée (ou la mort).
 
+Deux parcours : **le Chevalier** (Forêt des Pendus → Pont-levis → Château du Roi déchu) puis **le Squelette** (Limbes → Fleuve noir → Cathédrale d'Os), chacun avec son deck de 13 cartes gravées et ses cinématiques (intro + règles, passages entre lieux, boss final, fin).
+
 ## Raccourcis de test
-`?reset` efface la progression · `?jusqua=N` simule N victoires.
+`?reset` efface la progression · `?jusqua=N` simule N victoires · `?parcours=2` ouvre le parcours du squelette.
+Bouton **dev** (en bas à gauche, `DEV` dans `js/main.js`) : gagner, sauter un duel ou un lieu, rejouer les cinématiques. **À retirer avant la sortie.**
 
 ## Structure
 ```
-js/cardart.js  les 13 gravures (originales), dessinées en calques puis tramées
+js/cardart.js  les 13 gravures du chevalier (originales), calques tramés · js/cards2.js le deck du squelette
+js/plates.js   planches des cinématiques · js/cine.js le lecteur · js/story.js les textes
+js/fx2d.js     la plongée vers le duel
 js/cardview.js la carte en grand : parallaxe des calques + reflet irisé tramé
 js/cardtex.js  textures des cartes posées sur la table
 js/dotui.js    l'interface « en points » : bordures, trames, balayages (variables CSS)

@@ -3,7 +3,7 @@
 //  (originales), les gantelets du pèlerin, les décors du guide.
 // ─────────────────────────────────────────────────────────────
 import { THREE, TEX } from './render.js';
-import { FOES } from './content.js';
+import { FOES, FOES2, HERO2 } from './content.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const M = {};
@@ -91,6 +91,11 @@ export function makeGauntlet(side = 1) {
   const cuff = cone(0.075, 0.07, M.metal, 10); cuff.rotation.x = -Math.PI / 2; at(cuff, 0, 0, 0.055); arm.add(cuff);
   const spike = cone(0.012, 0.05, M.metalDark, 5); spike.rotation.z = -side * Math.PI / 2; at(spike, side * 0.06, 0.01, 0.2); arm.add(spike);
   root.add(arm);
+  // version « os » (squelette) : deux os fins à la place de l'avant-bras, cachés par défaut
+  const bones = new THREE.Group(); bones.visible = false; arm.add(bones);
+  for (const dx of [-0.018, 0.018]) { const b = cyl(0.011, 0.014, 0.36, M.bone, 6); b.rotation.x = Math.PI / 2; at(b, dx, 0, 0.21); bones.add(b); }
+  bones.add(at(sph(0.026, M.bone, 6, 5), 0, 0, 0.03));
+  root.userData.armParts = [va, cuff, spike, ...arm.children.filter((o) => o.geometry?.type === 'TorusGeometry')]; root.userData.bones = bones;
 
   const hand = new THREE.Group(); root.add(hand);
   hand.add(at(box(0.095, 0.03, 0.1, M.metal), 0, 0, -0.05));
@@ -394,6 +399,29 @@ export function buildCrypt(scene) {
     th.add(at(box(0.9, 0.45, 0.7, M.stone), 0, 0.75, 0)); th.add(at(box(1.0, 2.4, 0.2, M.stone), 0, 1.9, -0.35)); th.add(at(cone(0.2, 0.8, M.stone, 4), 0, 3.4, -0.35));
     for (const s of [-1, 1]) { th.add(at(cyl(0.07, 0.09, 3, M.stone, 6), s * 0.5, 1.5, -0.35)); th.add(at(makeSkull(1.6), s * 0.5, 1.1, 0.2)); }
   }
+  { // parcours II · les Limbes : arbres morts, tombes, plaine grise
+    const g = new THREE.Group(); zones.limbes = g; room.add(g);
+    const dk = new THREE.MeshStandardMaterial({ color: 0x3a3640, flatShading: true, roughness: 1 });
+    for (let k = 0; k < 18; k++) { const a = Math.random() * Math.PI * 2, rr = 3.6 + Math.random() * 4; if (Math.cos(a) < -0.5 && rr < 5) continue; const t = at(new THREE.Group(), Math.sin(a) * rr, 0, -1.2 - Math.cos(a) * rr); const s = 0.8 + Math.random() * 0.8; t.add(tube([[0, 0, 0], [0.1 * s, 1.6 * s, 0], [-0.1 * s, 3 * s, 0.1]], 0.12 * s, dk)); for (let j = 0; j < 3; j++) { const sd = j % 2 ? 1 : -1, y = (1.6 + j * 0.6) * s; t.add(tube([[0, y, 0], [sd * 0.7 * s, y + 0.5 * s, 0.1], [sd * 1.2 * s, y + 0.3 * s, 0.2]], 0.04 * s, dk)); } g.add(t); }
+    for (let k = 0; k < 22; k++) { const a = Math.random() * Math.PI * 2, rr = 2.6 + Math.random() * 3; if (Math.cos(a) < -0.3) continue; const t = at(new THREE.Group(), Math.sin(a) * rr, 0, -1.2 - Math.cos(a) * rr); t.add(at(box(0.4, 0.55, 0.1, M.stone), 0, 0.27, 0)); t.add(at(rx(cyl(0.2, 0.2, 0.1, M.stone, 10), Math.PI / 2), 0, 0.55, 0)); t.lookAt(V3(0, 0, -1.2)); t.rotation.z = (Math.random() - 0.5) * 0.3; g.add(t); }
+    const ms = new THREE.SpotLight(0xe8e0f0, 140, 20, 0.9, 0.7, 1); ms.position.set(-0.5, 7, -2.5); ms.target.position.set(0, 1.5, -6.5); g.add(ms, ms.target);
+  }
+  { // parcours II · le Fleuve noir : eau d'encre, poteaux à lanternes, la barque
+    const g = new THREE.Group(); zones.styx = g; room.add(g);
+    const water = new THREE.Mesh(new THREE.RingGeometry(1.6, 12, 32), new THREE.MeshStandardMaterial({ color: 0x0a1416, metalness: 0.7, roughness: 0.25 })); water.rotation.x = -Math.PI / 2; at(water, 0, 0.02, -1.2); g.add(water);
+    const fl2 = [];
+    for (let k = 0; k < 6; k++) { const a = -1.2 + k * 0.48, x = Math.sin(a) * 3.6, z = -1.2 - Math.cos(a) * 3.6; g.add(at(cyl(0.06, 0.08, 2.4, M.wood, 5), x, 1.2, z)); const f = makeFlame(2, false); at(f, x, 2.45, z); g.add(f); fl2.push(f); }
+    const boat = at(new THREE.Group(), 1.8, 0.1, -5.6); g.add(boat); const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.25, 3, 8, 1, false, 0, Math.PI), M.wood); hull.rotation.z = Math.PI / 2; hull.rotation.y = Math.PI / 2.4; at(hull, 0, 0.2, 0); boat.add(hull);
+    boat.add(at(cone(0.35, 1.7, M.clothDark, 8), 0, 1.1, 0)); boat.add(at(sph(0.2, M.clothDark, 8, 6), 0, 2.05, 0)); boat.add(tube([[0.3, 0, 0], [0.35, 2.4, 0.1]], 0.02, M.wood));
+    const lantL = new THREE.PointLight(0xffd890, 10, 6, 1.2); lantL.position.set(0, 2.4, -4.6); g.add(lantL);
+    zones.styx.userData.tick = (t) => { fl2.forEach((f) => f.userData.flicker(t)); boat.position.y = 0.1 + Math.sin(t * 0.8) * 0.05; };
+  }
+  { // parcours II · la Cathédrale d'Os : murs de crânes, trône d'os
+    const g = new THREE.Group(); zones.cathedrale = g; room.add(g);
+    for (let k = 0; k < 7; k++) { const a = -1.3 + k * 0.43, x = Math.sin(a) * 4.1, z = -1.2 - Math.cos(a) * 4.1; for (let j = 0; j < 5; j++) for (let i = -1; i <= 1; i++) { const sk = makeSkull(2.2); at(sk, x + Math.cos(a) * i * 0.32, 0.3 + j * 0.42, z - Math.sin(a) * i * 0.32); sk.lookAt(V3(0, 0.3 + j * 0.42, -1.2)); g.add(sk); } }
+    const th = at(new THREE.Group(), 0, 0, -4.4); g.add(th); th.add(at(box(1.2, 0.5, 0.8, M.bone), 0, 0.25, 0)); th.add(at(box(1.1, 2.6, 0.2, M.bone), 0, 1.5, -0.35)); for (let i = 0; i < 5; i++) th.add(at(makeSkull(1.8), -0.4 + i * 0.2, 2.9, -0.35));
+    const rl = new THREE.SpotLight(0xff6a50, 40, 10, 0.4, 0.7, 1); rl.position.set(0, 4, -4.6); rl.target.position.set(0, 2, -4.4); g.add(rl, rl.target);
+  }
   // ambiances vivantes : lucioles (forêt), pluie (pont), braises (château)
   const AN = 260, apos = new Float32Array(AN * 3), avel = new Float32Array(AN * 3);
   const ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.BufferAttribute(apos, 3));
@@ -401,13 +429,13 @@ export function buildCrypt(scene) {
   const rainG = new THREE.BufferGeometry(), rpos = new Float32Array(AN * 6); rainG.setAttribute('position', new THREE.BufferAttribute(rpos, 3));
   const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: 0xc8d0d8 })); room.add(rain);
   let azone = 'chateau';
-  const seed = (i) => { apos[i * 3] = (Math.random() - 0.5) * 7; apos[i * 3 + 1] = Math.random() * 4.5; apos[i * 3 + 2] = -1.2 + (Math.random() - 0.5) * 7; avel[i * 3] = (Math.random() - 0.5) * 0.2; avel[i * 3 + 1] = azone === 'chateau' ? 0.15 + Math.random() * 0.3 : azone === 'pont' ? -(5 + Math.random() * 2) : (Math.random() - 0.5) * 0.15; avel[i * 3 + 2] = (Math.random() - 0.5) * 0.2; };
+  const seed = (i) => { apos[i * 3] = (Math.random() - 0.5) * 7; apos[i * 3 + 1] = Math.random() * 4.5; apos[i * 3 + 2] = -1.2 + (Math.random() - 0.5) * 7; avel[i * 3] = (Math.random() - 0.5) * 0.2; avel[i * 3 + 1] = azone === 'chateau' || azone === 'cathedrale' ? 0.15 + Math.random() * 0.3 : azone === 'limbes' ? 0.08 + Math.random() * 0.15 : azone === 'pont' ? -(5 + Math.random() * 2) : (Math.random() - 0.5) * 0.15; avel[i * 3 + 2] = (Math.random() - 0.5) * 0.2; };
   for (let i = 0; i < AN; i++) seed(i);
   const tickAmb = (t, dt) => {
     for (let i = 0; i < AN; i++) {
-      apos[i * 3] += (avel[i * 3] + (azone === 'foret' ? Math.sin(t * 0.7 + i) * 0.15 : 0)) * dt;
+      apos[i * 3] += (avel[i * 3] + (azone === 'foret' || azone === 'styx' || azone === 'limbes' ? Math.sin(t * 0.7 + i) * 0.15 : 0)) * dt;
       apos[i * 3 + 1] += avel[i * 3 + 1] * dt; apos[i * 3 + 2] += avel[i * 3 + 2] * dt;
-      if (apos[i * 3 + 1] < 0 || apos[i * 3 + 1] > 4.6 || Math.abs(apos[i * 3]) > 4) { seed(i); apos[i * 3 + 1] = azone === 'pont' ? 4.5 : azone === 'chateau' ? 0.2 : Math.random() * 3; }
+      if (apos[i * 3 + 1] < 0 || apos[i * 3 + 1] > 4.6 || Math.abs(apos[i * 3]) > 4) { seed(i); apos[i * 3 + 1] = azone === 'pont' ? 4.5 : azone === 'chateau' || azone === 'cathedrale' || azone === 'limbes' ? 0.2 : Math.random() * 3; }
       if (azone === 'pont') { const j = i * 6; rpos[j] = apos[i * 3]; rpos[j + 1] = apos[i * 3 + 1]; rpos[j + 2] = apos[i * 3 + 2]; rpos[j + 3] = apos[i * 3] - 0.02; rpos[j + 4] = apos[i * 3 + 1] + 0.18; rpos[j + 5] = apos[i * 3 + 2]; }
     }
     ag.attributes.position.needsUpdate = true; rainG.attributes.position.needsUpdate = true;
@@ -416,14 +444,14 @@ export function buildCrypt(scene) {
   const setZone = (z) => {
     azone = z;
     amb2.visible = z !== 'pont'; rain.visible = z === 'pont';
-    amb2.material.color.set(z === 'foret' ? 0xffd070 : 0xff7a2a); amb2.material.size = z === 'foret' ? 0.022 : 0.016;
+    amb2.material.color.set({ foret: 0xffd070, limbes: 0xf0f0ff, styx: 0x9ff0e0 }[z] ?? 0xff7a2a); amb2.material.size = z === 'foret' || z === 'styx' ? 0.022 : z === 'limbes' ? 0.03 : 0.016;
     for (let i = 0; i < AN; i++) seed(i);
     for (const k in zones) zones[k].visible = k === z;
-    for (const w of walls) w.visible = z !== 'foret';
-    const fogC = { foret: 0x8c9c82, pont: 0x565c64, chateau: 0x3c3830 }[z];
-    amb.intensity = z === 'foret' ? 3.4 : 2.4;
+    for (const w of walls) w.visible = z !== 'foret' && z !== 'limbes' && z !== 'styx';
+    const fogC = { foret: 0x8c9c82, pont: 0x565c64, chateau: 0x3c3830, limbes: 0x8a8692, styx: 0x283a3c, cathedrale: 0x40302a }[z];
+    amb.intensity = z === 'foret' || z === 'limbes' ? 3.4 : 2.4;
     scene.fog.color.set(fogC); scene.background = new THREE.Color(fogC);
-    scene.fog.near = 2.6; scene.fog.far = z === 'foret' ? 12 : 11;
+    scene.fog.near = 2.6; scene.fog.far = z === 'foret' || z === 'limbes' ? 12 : 11;
   };
   setZone('chateau');
   return {
@@ -678,6 +706,12 @@ function foeHead(kind) {
     case 'exec': h.add(lathe([[0, 0.42], [0.05, 0.35], [0.11, 0.2], [0.15, 0.04], [0.16, -0.1], [0.24, -0.24], [0, -0.24]], M.clothDark, 10)); eyes(0.06, -0.15, M.eye, 0.045); for (const x of [-0.045, 0.045]) h.add(at(sph(0.026, M.black, 6, 5), x, 0.06, -0.14)); break;
     case 'veil': h.add(at(skull(0.85), 0, 0, -0.02)); { const v = lathe([[0, 0.22], [0.12, 0.2], [0.16, 0.05], [0.2, -0.15], [0.3, -0.45], [0, -0.45]], new THREE.MeshStandardMaterial({ color: 0x9a9a8a, transparent: true, opacity: 0.55, flatShading: true }), 12); h.add(v); } h.add(at(crown(false), 0, 0.16, 0)); break;
     case 'king': h.add(at(skull(1.1), 0, 0, -0.02)); for (let k = 0; k < 16; k++) { const a = Math.PI * 0.2 + k / 16 * Math.PI * 1.6; h.add(tube([[Math.cos(a) * 0.09, 0.08, Math.sin(a) * 0.09], [Math.cos(a) * 0.13, -0.1, Math.sin(a) * 0.12], [Math.cos(a) * 0.15, -0.34, Math.sin(a) * 0.13]], 0.004, M.bone)); } h.add(at(crown(true), 0, 0.15, 0)); eyes(0.0, -0.11, M.eye, 0.035); break;
+    case 'ghost': { const gm = new THREE.MeshStandardMaterial({ color: 0xd8dce4, emissive: 0x2a2e36, transparent: true, opacity: 0.78, flatShading: true }); h.add(lathe([[0, 0.3], [0.09, 0.27], [0.17, 0.15], [0.2, -0.02], [0.24, -0.25], [0.32, -0.42], [0, -0.42]], gm, 10)); h.add(at(sph(0.13, M.black, 8, 6), 0, 0, -0.09)); eyes(0.02, -0.2, M.eyePale, 0.04); break; }
+    case 'plague': hood(); { const beak = cone(0.06, 0.3, new THREE.MeshStandardMaterial({ color: 0x9a8a62, flatShading: true }), 6); beak.rotation.x = -Math.PI / 2 - 0.35; at(beak, 0, -0.06, -0.26); h.add(beak); } for (const x of [-0.05, 0.05]) h.add(at(sph(0.032, M.flameCore, 6, 5), x, 0.03, -0.2)); h.add(at(cyl(0.3, 0.3, 0.02, M.clothDark, 14), 0, 0.2, 0)); h.add(at(cyl(0.14, 0.15, 0.16, M.clothDark, 12), 0, 0.29, 0)); break;
+    case 'horns': h.add(at(skull(1.05), 0, 0, -0.02)); for (const sd of [-1, 1]) h.add(tube([[sd * 0.08, 0.08, 0], [sd * 0.22, 0.16, 0.06], [sd * 0.3, 0.05, 0.02], [sd * 0.24, -0.08, -0.06], [sd * 0.17, -0.02, -0.1]], 0.03, M.bone)); eyes(0.0, -0.11, M.eye, 0.035); break;
+    case 'skull': h.add(at(skull(1.1), 0, 0, -0.02)); h.add(at(box(0.12, 0.04, 0.08, M.bone), 0, -0.14, -0.06)); eyes(0.0, -0.11, M.eyePale, 0.036); break;
+    case 'ferry': h.add(lathe([[0, 0.44], [0.06, 0.38], [0.14, 0.24], [0.19, 0.06], [0.21, -0.14], [0.28, -0.32], [0, -0.32]], M.clothDark, 10)); h.add(at(sph(0.14, M.black, 8, 6), 0, 0.02, -0.08)); eyes(0.03, -0.225, M.eye, 0.034); break;
+    case 'death': hood(); h.add(at(skull(0.95), 0, -0.02, -0.13)); eyes(0.0, -0.23, M.eye, 0.033); h.add(at(crown(false), 0, 0.2, 0.02)); break;
     default: h.add(cyl(0.14, 0.14, 0.28, M.metal, 10));
   }
   return h;
@@ -713,6 +747,8 @@ export function buildFoe(kit = {}) {
   if (ex.includes('skulls')) for (let k = 0; k < 7; k++) { const a = Math.PI * (0.15 + k * 0.7 / 6); root.add(at(makeSkull(0.45), Math.cos(a) * 0.2, 1.38 - Math.sin(a) * 0.12, -0.3 - Math.sin(a) * 0.04)); }
   if (ex.includes('crozier')) { const cz = at(new THREE.Group(), 0.5, 0, -0.15); root.add(cz); cz.add(at(cyl(0.015, 0.015, 2.1, M.wood, 6), 0, 1.05, 0)); cz.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 5, 12, Math.PI * 1.5), M.bronze), 0.1, 2.1, 0)); }
   if (ex.includes('banner')) { const bn = at(new THREE.Group(), -0.6, 0, 0.1); root.add(bn); bn.add(at(cyl(0.02, 0.02, 2.6, M.wood, 6), 0, 1.3, 0)); const fl = at(box(0.6, 1.1, 0.01, M.cloth), 0.32, 2.0, 0); bn.add(fl); fl.add(at(box(0.06, 0.6, 0.02, M.black), 0, 0.05, -0.01)); fl.add(at(box(0.4, 0.06, 0.02, M.black), 0, 0.2, -0.01)); ticks.push((t) => { fl.rotation.y = Math.sin(t * 1.2) * 0.15; }); }
+  if (ex.includes('lantern')) { const ln = at(new THREE.Group(), 0.42, 0.95, -0.5); root.add(ln); ln.add(at(cyl(0.01, 0.01, 0.5, M.wood, 4), 0, 0.25, 0)); ln.add(at(box(0.1, 0.13, 0.1, M.metalDark), 0, -0.05, 0)); const fl = makeFlame(1.6, false); at(fl, 0, -0.08, 0); ln.add(fl); ticks.push((t) => { fl.userData.flicker(t); ln.rotation.z = Math.sin(t * 1.3) * 0.08; }); }
+  if (ex.includes('scythe')) { const sc = at(new THREE.Group(), -0.52, 0, -0.25); root.add(sc); sc.add(at(cyl(0.018, 0.018, 2.4, M.wood, 6), 0, 1.2, 0)); sc.add(tube([[0, 2.36, 0], [0.3, 2.42, -0.1], [0.62, 2.3, -0.12], [0.85, 2.05, -0.06]], 0.022, M.metal)); }
   if (kit.sword === 'bourreau') { const sw = at(new THREE.Group(), 0.55, 0, -0.2); sw.rotation.z = 0.1; root.add(sw); sw.add(at(box(0.11, 1.1, 0.015, M.metal), 0, 0.6, 0)); sw.add(at(box(0.36, 0.04, 0.04, M.metalDark), 0, 1.16, 0)); sw.add(at(box(0.04, 0.3, 0.04, M.clothDark), 0, 1.33, 0)); }
   if (kit.shield) { const sh = at(new THREE.Group(), -0.48, 0.75, -0.2); sh.rotation.y = 0.5; root.add(sh); sh.add(box(0.45, 0.55, 0.04, M.wood)); sh.add(at(box(0.06, 0.5, 0.05, M.metal), 0, 0, -0.01)); sh.add(at(box(0.4, 0.06, 0.05, M.metal), 0, 0.08, -0.01)); }
   if (kit.head === 'kettle') { const cb = at(new THREE.Group(), 0.45, 0.95, -0.4); root.add(cb); cb.add(at(box(0.05, 0.05, 0.6, M.wood), 0, 0, 0)); cb.add(at(box(0.5, 0.03, 0.03, M.metalDark), 0, 0.02, -0.25)); }
@@ -739,10 +775,8 @@ function brighten(root) {
 
 export function makeCreature(kind, variant = 0) {
   if (kind === 'pelerin') return CREATURES.pelerin(variant);
-  if (/^f\d+$/.test(kind)) {
-    const f = FOES[+kind.slice(1)];
-    return buildFoe(f.kit);
-  }
+  if (/^[fs]\d+$/.test(kind)) return buildFoe((kind[0] === 'f' ? FOES : FOES2)[+kind.slice(1)].kit);
+  if (kind === 'h2') return buildFoe(HERO2);
   return CREATURES[kind]();
 }
 
@@ -811,6 +845,45 @@ export function buildExterior(scene) {
     const cs = new THREE.SpotLight(0xe8e4d8, 85, 60, 0.5, 1.0, 1); cs.position.set(5, 6, -6); cs.target.position.set(0, 9, -22); c.add(cs, cs.target);
     const crows = []; for (let k = 0; k < 6; k++) { const b = at(box(0.3, 0.02, 0.1, M.black), 0, 0, 0); crows.push(b); c.add(b); }
     ticks.chateau = (t) => crows.forEach((b, i) => { const a = t * 0.3 + i; b.position.set(Math.cos(a) * (5 + i), 22 + Math.sin(a * 2) * 1.5, -22 + Math.sin(a) * 4); b.scale.x = 1 + Math.sin(t * 8 + i) * 0.4; });
+  }
+  // ── parcours II : le royaume des morts ──
+  const ghostM = new THREE.MeshStandardMaterial({ color: 0xe8ecf0, emissive: 0x8a909a, flatShading: true });
+  const tomb = (x, z, s = 1, tilt = 0) => { const t = new THREE.Group(); t.add(at(box(0.5 * s, 0.7 * s, 0.12 * s, M.stone), 0, 0.35 * s, 0)); t.add(at(rx(cyl(0.25 * s, 0.25 * s, 0.12 * s, M.stone, 10), Math.PI / 2), 0, 0.7 * s, 0)); t.rotation.z = tilt; t.rotation.y = (Math.random() - 0.5) * 0.6; return at(t, x, 0, z); };
+  const deadTree = (x, z, s) => { const t = at(new THREE.Group(), x, 0, z); t.add(tube([[0, 0, 0], [0.1 * s, 1.6 * s, 0], [-0.1 * s, 3 * s, 0.1], [0.2 * s, 4 * s, 0]], 0.16 * s, dark)); for (let k = 0; k < 4; k++) { const y = (1.8 + k * 0.6) * s, sd = k % 2 ? 1 : -1; t.add(tube([[0, y, 0], [sd * 0.8 * s, y + 0.5 * s, 0.1], [sd * 1.4 * s, y + 0.4 * s, 0.2]], 0.05 * s, dark)); } return t; };
+  { // les Limbes : plaine de cendre, arbres morts, tombes, âmes qui montent
+    const l = new THREE.Group(); Z.limbes = l; g.add(l);
+    for (let k = 0; k < 26; k++) { const x = (Math.random() - 0.5) * 40, z = -7 - Math.random() * 30; if (Math.abs(x) < 2.4 && z > -18) continue; l.add(deadTree(x, z, 0.8 + Math.random() * 1.1)); }
+    for (let k = 0; k < 40; k++) { const x = (Math.random() - 0.5) * 22, z = -6 - Math.random() * 16; if (Math.abs(x) < 1.2) continue; l.add(tomb(x, z, 0.8 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4)); }
+    const gate = at(new THREE.Group(), 0, 0, -22); l.add(gate); for (const x of [-1.6, 1.6]) gate.add(at(box(0.8, 6, 0.8, pale), x, 3, 0)); gate.add(at(ogive(3.2, 3.4, 0.5, 0.5, M.stone), 0, 5.9, 0)); gate.add(at(new THREE.Mesh(new THREE.PlaneGeometry(2.4, 6), new THREE.MeshBasicMaterial({ color: 0xf0eef4 })), 0, 3, -0.1));
+    const souls = []; for (let k = 0; k < 40; k++) { const m = at(sph(0.07 + Math.random() * 0.06, ghostM, 6, 4), (Math.random() - 0.5) * 16, Math.random() * 8, -6 - Math.random() * 18); m.userData.v = 0.3 + Math.random() * 0.5; souls.push(m); l.add(m); }
+    const ls = new THREE.SpotLight(0xe8e0f0, 160, 40, 0.7, 0.9, 1); ls.position.set(0, 12, -6); ls.target.position.set(0, 2, -22); l.add(ls, ls.target);
+    ticks.limbes = (t) => souls.forEach((m, i) => { m.position.y += m.userData.v * 0.016; m.position.x += Math.sin(t + i) * 0.004; if (m.position.y > 9) m.position.y = 0; });
+  }
+  { // le Fleuve noir : eau d'encre, la barque du passeur, les rochers
+    const st = new THREE.Group(); Z.styx = st; g.add(st);
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(60, 40), new THREE.MeshStandardMaterial({ color: 0x0a1416, metalness: 0.7, roughness: 0.25 })); water.rotation.x = -Math.PI / 2; at(water, 0, 0.03, -27); st.add(water);
+    for (let k = 0; k < 24; k++) { const sd = k % 2 ? 1 : -1, x = sd * (3 + Math.random() * 14), z = -8 - Math.random() * 26, h = 1 + Math.random() * 5; st.add(at(cone(0.8 + Math.random(), h, dark, 5), x, h / 2, z)); }
+    const boat = at(new THREE.Group(), 0.6, 0.1, -12); st.add(boat);
+    const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 3.6, 8, 1, false, 0, Math.PI), M.wood); hull.rotation.z = Math.PI / 2; hull.rotation.y = Math.PI / 2; at(hull, 0, 0.25, 0); boat.add(hull);
+    boat.add(at(cone(0.42, 2.0, M.clothDark, 8), 0, 1.3, 0.6)); boat.add(at(lathe([[0, 0.34], [0.12, 0.26], [0.2, 0.06], [0.24, -0.16], [0, -0.16]], M.clothDark, 8), 0, 2.45, 0.6)); boat.add(at(sph(0.13, M.black, 6, 5), 0, 2.42, 0.5));
+    boat.add(tube([[0.4, 0, 0.6], [0.45, 2.2, 0.6], [0.5, 3.4, 0.5]], 0.025, M.wood));
+    const pl = at(new THREE.Group(), 0.5, 3.0, 0.2); boat.add(pl); pl.add(at(box(0.14, 0.2, 0.14, M.metalDark), 0, 0, 0)); const bf = makeFlame(2.5); at(bf, 0, -0.02, 0); pl.add(bf);
+    const bl = new THREE.PointLight(0xffd890, 18, 8, 1.2); bl.position.set(0.5, 3, -11.8); st.add(bl);
+    const far = at(new THREE.Group(), 0, 0, -32); st.add(far); far.add(at(box(30, 7, 2, dark), 0, 3.5, 0)); far.add(at(ogive(3, 4, 0.6, 0.6, M.stone), 0, 4, 1.2)); far.add(at(new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.4), win), 0, 2.2, 1.1));
+    const mistM = new THREE.MeshBasicMaterial({ color: 0xc8dcd8, transparent: true, opacity: 0.35, depthWrite: false }); const mists = []; for (let k = 0; k < 4; k++) { const m = at(new THREE.Mesh(new THREE.PlaneGeometry(50, 1), mistM), 0, 0.4 + k * 0.3, -9 - k * 5); mists.push(m); st.add(m); }
+    const ws2 = new THREE.SpotLight(0xd0e8e0, 140, 40, 0.6, 0.9, 1); ws2.position.set(-4, 10, -4); ws2.target.position.set(0, 1, -14); st.add(ws2, ws2.target);
+    ticks.styx = (t) => { boat.position.y = 0.1 + Math.sin(t * 0.8) * 0.06; boat.rotation.z = Math.sin(t * 0.6) * 0.03; bf.userData.flicker(t); mists.forEach((m, i) => { m.position.x = Math.sin(t * 0.07 + i) * 4; }); };
+  }
+  { // la Cathédrale d'Os : nef de crânes, rosace de sang
+    const ca = new THREE.Group(); Z.cathedrale = ca; g.add(ca);
+    const nave = at(new THREE.Group(), 0, 0, -20); ca.add(nave);
+    nave.add(at(box(16, 16, 1, pale), 0, 8, -6)); nave.add(at(ogive(7, 10, 0.9, 0.8, M.stone), 0, 0, -5.4));
+    const rose = makeRose(2.2); at(rose, 0, 8.5, -5.3); nave.add(rose);
+    for (const sx of [-1, 1]) for (let k = 0; k < 6; k++) { const col = at(new THREE.Group(), sx * 3.2, 0, 8 - k * 2.6); nave.add(col); for (let j = 0; j < 9; j++) { const sk = makeSkull(2.6); at(sk, 0, 0.3 + j * 0.55, 0); sk.rotation.y = sx * -Math.PI / 2 + (Math.random() - 0.5) * 0.4; col.add(sk); } col.add(at(cyl(0.35, 0.4, 0.3, M.stone, 8), 0, 5.3, 0)); }
+    for (let k = 0; k < 7; k++) { const c = makeCandle(0.5, 0.06, k % 3 === 0); c.scale.setScalar(1.6); at(c, -2.4 + k * 0.8, 0, -24.5); ca.add(c); }
+    const rl = new THREE.SpotLight(0xff5a40, 220, 40, 0.6, 0.8, 1); rl.position.set(0, 8.5, -25); rl.target.position.set(0, 0, -8); ca.add(rl, rl.target);
+    const cs2 = new THREE.SpotLight(0xf0e0c8, 120, 40, 0.5, 0.9, 1); cs2.position.set(3, 7, -6); cs2.target.position.set(0, 3, -20); ca.add(cs2, cs2.target);
+    ticks.cathedrale = (t) => { rose.rotation.z = t * 0.03; };
   }
   scene.add(new THREE.HemisphereLight(0xc8ccd0, 0x2a2a26, 2.6));
   const moonL = new THREE.DirectionalLight(0xe8ecf8, 3.2); moonL.position.set(6, 12, 8); scene.add(moonL);

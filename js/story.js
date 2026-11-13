@@ -40,4 +40,24 @@ export const STORY = [
       { plate: 'tombe', title: 'Parcours II', fx: 'souls', text: ['Mais sous la terre, quelqu\'un d\'autre a entendu battre les cartes…'] },
     ],
   },
+  { // ── II · le squelette ──
+    intro: [
+      { plate: 'tombe', title: 'Le Squelette', fx: 'souls', text: ["Il est mort depuis si longtemps qu'il a oublié son nom.", "Il ne se rappelle qu'une chose : le bruit des cartes."] },
+      { plate: 'mortloin', fx: 'ash', hide: ['eyes'], events: [{ t: 2.2, show: 'eyes', flash: 0.7, sound: 'bust' }], text: ['Au royaume des morts, tout se joue : la mémoire, la traversée, le repos.', 'Et tout au bout, la Mort tient la banque.'] },
+      RULES,
+      { plate: 'limbes', title: 'Les Limbes', fx: 'ash', drift: [0, -0.8, 0, 0.6], text: ['La route commence dans la cendre, parmi les âmes qui ne savent plus où aller.'] },
+    ],
+    zones: [null,
+      [{ plate: 'barque', title: 'Le Fleuve noir', fx: 'flies', text: ["Les Limbes s'éteignent derrière toi.", 'Sur l\'eau noire, une barque attend. Le passeur se paie en cartes.'] }],
+      [{ plate: 'cathedrale', title: "La Cathédrale d'Os", fx: 'embers', n: 50, drift: [0, 0.6, 0, -0.6], text: ["L'autre rive.", 'Une cathédrale bâtie de crânes et, tout au fond, une lumière rouge.'] }],
+    ],
+    boss: [
+      { plate: 'mort', hide: ['eyes'], fx: 'ash', events: [{ t: 1.5, show: 'eyes', flash: 1, shake: 0.8, sound: 'bust' }], text: [{ t: '« Tiens. Un mort qui veut encore jouer…', cls: 'q' }, { t: 'Assieds-toi. Je tiens la banque depuis le premier jour. »', cls: 'q' }] },
+      { plate: 'duel2', fx: 'embers', n: 40, title: 'Le dernier duel', text: ['Premier à 200.', 'Contre la Mort, on ne joue qu\'une fois.'] },
+    ],
+    ending: [
+      { plate: 'faux', fx: 'dust', text: ['La Mort a perdu.', "Pour la première fois, quelqu'un lui a pris sa faux."] },
+      { plate: 'repos', title: 'Fin', fx: 'flies', text: ['Le squelette se souvient de son nom.', 'Il peut enfin dormir. Merci d\'avoir joué.'] },
+    ],
+  },
 ];

@@ -68,6 +68,16 @@ export class Stage {
     this.highlight = new THREE.PointLight(0xe0f0c0, 0, 1.6, 1.5); this.scene.add(this.highlight);
   }
 
+  /** mains du héros : gantelets (chevalier) ou os (squelette) */
+  setHands(kind = 'gant') {
+    if (this.hands === kind) return; this.hands = kind;
+    const bone = this._bone ||= new THREE.MeshStandardMaterial({ color: 0x9a907a, roughness: 0.9, flatShading: true });
+    for (const g of [this.R, this.L]) {
+      g.traverse((o) => { if (!o.isMesh) return; o.userData.m0 ||= o.material; o.material = kind === 'os' ? bone : o.userData.m0; });
+      for (const m of g.userData.armParts || []) m.visible = kind !== 'os';
+      if (g.userData.bones) g.userData.bones.visible = kind === 'os';
+    }
+  }
   // ── sièges ─────────────────────────────────────────────────
   setPlayers(players, you) {
     for (const s of this.seats.values()) if (s.creature) { this.scene.remove(s.creature.root); const f = s.creature.root.userData.fill; if (f) { this.scene.remove(f); if (f.userData.face) { const fc = f.userData.face; this.scene.remove(fc, fc.target); if (fc.userData.rim) this.scene.remove(fc.userData.rim, fc.userData.rim.target); } } }

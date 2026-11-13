@@ -41,7 +41,7 @@ export class Play {
   // ── montage ────────────────────────────────────────────────
   mount(snap, you) {
     this.you = you; this.snap = snap;
-    this.names = Object.fromEntries(snap.players.map((p) => [p.id, p.id === you ? 'Pèlerin' : BESTIAIRE[p.persona]?.name || p.name]));
+    this.names = Object.fromEntries(snap.players.map((p) => [p.id, p.id === you ? p.name : BESTIAIRE[p.persona]?.name || p.name]));
     this.stage.setPlayers(snap.players, you);
     this.stage.holdR = false; this.stage.holdL = false;
     this.stage.layout(snap, { instant: true });
@@ -76,9 +76,9 @@ export class Play {
   }
   /** médaillon : le visage de la créature (ou du pèlerin), rendu tramé aux couleurs du lieu */
   face(p) {
-    const pal = this.dr.paletteName in PALETTES ? this.dr.paletteName : 'velin', k = (p.persona || 'pelerin') + pal;
+    const pal = this.dr.paletteName in PALETTES ? this.dr.paletteName : 'velin', who = p.persona || 'pelerin', k = who + pal;
     this._faces ||= new Map();
-    if (!this._faces.has(k)) { try { this._faces.set(k, portraitCanvas(this.dr, p.kind === 'ai' ? p.persona : 'pelerin', { palette: pal, w: 72, h: 84 }).toDataURL()); } catch { this._faces.set(k, ''); } }
+    if (!this._faces.has(k)) { try { this._faces.set(k, portraitCanvas(this.dr, who, { palette: pal, w: 72, h: 84 }).toDataURL()); } catch { this._faces.set(k, ''); } }
     return this._faces.get(k);
   }
   sync(snap) {
