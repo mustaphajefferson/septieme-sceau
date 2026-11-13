@@ -19,7 +19,8 @@ export class CardView {
     root.innerHTML = `<canvas class="cv-rays"></canvas>
       <div class="cv-head"><h2></h2><p></p></div>
       <div class="cv-fly"><div class="cv-tilt"><canvas class="cv-front" width="${CW}" height="${CH}"></canvas><img class="cv-back" alt=""></div></div>
-      <div class="cv-foot"><p class="cv-cap"></p><button class="dbtn warm hidden"><span>Continuer</span></button></div>`;
+      <div class="cv-foot"><p class="cv-cap"></p><button class="dbtn warm hidden"><span>Continuer</span></button></div>
+      <button class="cv-nav prev" aria-label="Carte précédente"><span>‹</span></button><button class="cv-nav next" aria-label="Carte suivante"><span>›</span></button>`;
     this.cv = root.querySelector('.cv-front'); this.ctx = this.cv.getContext('2d');
     this.img = this.ctx.createImageData(CW, CH); this.buf = new Uint32Array(this.img.data.buffer); this.codes = new Uint8Array(CW * CH);
     this.rays = root.querySelector('.cv-rays'); this.rctx = this.rays.getContext('2d');
@@ -27,7 +28,14 @@ export class CardView {
     this.open_ = false; this.tx = 0; this.ty = 0; this.gx = 0; this.gy = 0; this.lastMove = -9; this.t = 0; this.age = 0;
     const move = (e) => { const r = this.cv.getBoundingClientRect(); this.gx = clamp((e.clientX - (r.left + r.width / 2)) / (r.width * 0.7)); this.gy = clamp((e.clientY - (r.top + r.height / 2)) / (r.height * 0.7)); this.lastMove = this.t; };
     root.addEventListener('pointermove', move); root.addEventListener('pointerdown', move);
-    root.addEventListener('click', (e) => { if (!this.reward && this.age > 0.5 && !e.target.closest('button')) this.close(); });
+    root.addEventListener('click', (e) => { if (!this.reward && this.age > 0.5 && !e.target.closest('button') && !this.swiped) this.close(); this.swiped = false; });
+    // passer à la carte voisine : flèches, clavier, glissé
+    root.querySelector('.prev').addEventListener('click', () => this.step(-1));
+    root.querySelector('.next').addEventListener('click', () => this.step(1));
+    addEventListener('keydown', (e) => { if (!this.open_ || this.reward) return; if (e.key === 'ArrowLeft') this.step(-1); if (e.key === 'ArrowRight') this.step(1); });
+    let sx = null;
+    root.addEventListener('pointerdown', (e) => { sx = e.clientX; });
+    root.addEventListener('pointerup', (e) => { if (sx == null || this.reward) return; const d = e.clientX - sx; sx = null; if (Math.abs(d) > 60) { this.swiped = true; this.step(d < 0 ? 1 : -1); } });
     this.btn.addEventListener('click', () => { const f = this.onDone; this.close(); f?.(); });
     addEventListener('resize', () => this.open_ && this.size());
   }
@@ -44,8 +52,9 @@ export class CardView {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const dx = x - W / 2, dy = y - H * 0.48; this.rang[y * W + x] = Math.atan2(dy, dx); this.rrad[y * W + x] = Math.hypot(dx, dy) / m; }
   }
   /** v : rang · plain : carte sans gravure · reward : mise en scène du butin (titre, rayons, bouton) */
-  open(v, { plain = false, reward = null, onDone = null } = {}) {
-    this.face = cardFace(v, plain); this.reward = reward; this.onDone = onDone;
+  open(v, { plain = false, reward = null, onDone = null, nav = null, dir = 0 } = {}) {
+    this.face = cardFace(v, plain); this.reward = reward; this.onDone = onDone; this.nav = reward ? null : nav; this.v = v;
+    this.root.classList.toggle('navs', !!this.nav);
     this.root.querySelector('.cv-back').src = backCanvas().toDataURL();
     this.root.querySelector('.cv-head h2').textContent = reward?.title || '';
     this.root.querySelector('.cv-head p').textContent = reward?.sub || '';
@@ -55,10 +64,13 @@ export class CardView {
     this.root.classList.remove('hidden');
     this.open_ = true; this.age = 0; this.gx = this.gy = 0; this.tx = 0.9; this.ty = -0.5; this.lastMove = -9;
     this.size();
-    this.fly.style.animation = 'none'; void this.fly.offsetWidth; this.fly.style.animation = '';
+    this.fly.style.animation = 'none'; void this.fly.offsetWidth; this.fly.style.animation = dir ? `cv-slide-${dir > 0 ? 'r' : 'l'} .42s cubic-bezier(.2, .8, .25, 1) both` : '';
+    if (dir) { this.age = 0.6; this.tx = -dir * 0.9; }
     this.frame(this.t, 0);
   }
   close() { this.open_ = false; this.root.classList.add('hidden'); }
+  /** carte voisine (nav(v, dir) → { v, plain } ou null) */
+  step(dir) { const n = this.nav?.(this.v, dir); if (n) { this.onStep?.(); this.open(n.v, { plain: n.plain, nav: this.nav, dir }); } }
 
   frame(t, dt) {
     if (!this.open_) return;

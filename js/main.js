@@ -18,6 +18,10 @@ import { NAMES, clearCards } from './cardart.js';
 import { CardView } from './cardview.js';
 import { installDotUI } from './dotui.js';
 import { wait } from './fx.js';
+import { Rush } from './fx2d.js';
+
+// ⚠ outils de test (bouton « dev » en bas à gauche) — à retirer avant la sortie
+const DEV = true;
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -57,6 +61,8 @@ const dr = new DitherRenderer(canvas, { pixel: (w, h) => Math.max(2, Math.min(w,
 const play = new Play(dr);
 const veil = new Veil($('#veil'));
 const cardView = new CardView($('#cardview'));
+cardView.onStep = () => sound.play('flip');
+const rush = new Rush($('#rush'));
 const mouse = { x: 0, y: 0, sx: 0, sy: 0 };
 addEventListener('pointermove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
 const extScene = new THREE.Scene();
@@ -66,13 +72,14 @@ const SHOTS = {
   title: { pos: [0.4, 1.6, 5.5], look: [0, 4.2, -12], fov: 55 },
   menu: { pos: [-1.0, 1.9, 2.2], look: [0, 3.4, -14], fov: 56 },
   death: { pos: [0.2, 1.2, 1.2], look: [0, 2.6, -14], fov: 50 },
+  rush: { pos: [-0.2, 2.6, -7.5], look: [0, 3.4, -16], fov: 26 },
 };
 let shot = { pos: new THREE.Vector3(...SHOTS.title.pos), look: new THREE.Vector3(...SHOTS.title.look), fov: SHOTS.title.fov };
 let shotFrom = null, shotTo = null, shotK = 1;
-function goShot(name, dur = 2.2) {
+function goShot(name, dur = 2.2, ease = 'io') {
   const s = SHOTS[name]; if (!s) return;
   shotFrom = { pos: shot.pos.clone(), look: shot.look.clone(), fov: shot.fov };
-  shotTo = { pos: new THREE.Vector3(...s.pos), look: new THREE.Vector3(...s.look), fov: s.fov, dur };
+  shotTo = { pos: new THREE.Vector3(...s.pos), look: new THREE.Vector3(...s.look), fov: s.fov, dur, ease };
   shotK = 0;
 }
 function placeGL() {
@@ -85,7 +92,7 @@ function placeGL() {
   extCam.aspect = r.width / r.height; extCam.updateProjectionMatrix();
 }
 let palSync = '';
-const syncUI = () => { const P = PALETTES[dr.paletteName] || PALETTES.fange; palSync = dr.paletteName; installDotUI(P); veil.setPalette(P); };
+const syncUI = () => { const P = PALETTES[dr.paletteName] || PALETTES.fange; palSync = dr.paletteName; installDotUI(P); veil.setPalette(P); rush.pal(P.ramp, P.warm); };
 addEventListener('resize', () => { placeGL(); veil.resize(); syncUI(); });
 
 let last = performance.now(), ct = 0;
@@ -96,6 +103,7 @@ function loop(now) {
   if (dr.paletteName !== palSync) syncUI();
   veil.frame(now / 1000, dt);
   cardView.frame(now / 1000, dt);
+  rush.frame(now / 1000, dt);
   if (cardView.isOpen && cardView.reward) return;                // le butin couvre tout l'écran
   if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
   if (current === 'deck') { play.stage.update(dt); play.stage.render(); return; }
@@ -105,7 +113,7 @@ function loop(now) {
   ext.tick(ct);
   if (shotTo) {
     shotK = Math.min(1, shotK + dt / shotTo.dur);
-    const k = shotK < 0.5 ? 2 * shotK * shotK : 1 - Math.pow(-2 * shotK + 2, 2) / 2;
+    const k = shotTo.ease === 'in' ? shotK * shotK * shotK : shotK < 0.5 ? 2 * shotK * shotK : 1 - Math.pow(-2 * shotK + 2, 2) / 2;
     shot.pos.lerpVectors(shotFrom.pos, shotTo.pos, k); shot.look.lerpVectors(shotFrom.look, shotTo.look, k); shot.fov = shotFrom.fov + (shotTo.fov - shotFrom.fov) * k;
     if (shotK >= 1) shotTo = null;
   }
@@ -124,7 +132,7 @@ function show(id) {
   if (id !== 'game') dr.setPalette(id === 'death' ? 'sang' : PAL[zoneOf(save.node).place]);
   if (id !== 'deck') play.stage.clearDeck();
   ext.showPilgrim(id !== 'title');
-  $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
+  $$('.screen').forEach((s) => { s.classList.toggle('on', s.id === id); s.classList.remove('leaving'); });
   requestAnimationFrame(placeGL);
   setTimeout(placeGL, 450);
 }
@@ -147,13 +155,18 @@ async function go(fn, type = 'iris') {
   veil.open();
 }
 // ── inspecter une carte : en grand, inclinable, irisée ──
-const inspect = (v) => { sound.play('flip'); cardView.open(v, { plain: !owns(v) }); };
+const cardNav = (v, d) => { const n = (v + d + 13) % 13; return { v: n, plain: !owns(n) }; };
+const inspect = (v) => { sound.play('flip'); cardView.open(v, { plain: !owns(v), nav: cardNav }); };
 
 // ── ACCUEIL ──────────────────────────────────────────────────
 async function boot() {
   syncUI();
   show('title');
   requestAnimationFrame(loop);
+  // la musique part dès l'ouverture (ou au premier geste, si le navigateur bloque le son)
+  sound.init().then(() => sound.startMusic('menu')).catch(() => {});
+  const wake = () => { sound.init().then(() => sound.startMusic('menu')); for (const e of ['pointerdown', 'keydown', 'touchstart']) removeEventListener(e, wake, true); };
+  for (const e of ['pointerdown', 'keydown', 'touchstart']) addEventListener(e, wake, true);
   await document.fonts.ready;
   const [fr] = await Promise.all([loadDots('art/cadre-racines.png'), ...['60px Jacquard', '700 30px Grenze', '500 20px Grenze'].map((f) => document.fonts.load(f).catch(() => {}))]);
   clearCards(); clearFaces(); play.stage.refreshBack();
@@ -223,8 +236,16 @@ play.onInspect = (card) => inspect(card.v);
 let session = null;
 async function startDuel(n) {
   if (busy) return; busy = true;
-  sound.play('whoosh');
-  await veil.close('iris');
+  // la plongée : la caméra fonce dans le décor, traits de vitesse, éclair
+  sound.play('whoosh'); setTimeout(() => sound.play('toll'), 250);
+  document.body.classList.add('lbox');
+  if (current === 'menu') { goShot('rush', 1.15, 'in'); $('#menu').classList.add('leaving'); veil.setFrame(false, 600); }
+  rush.to('k', 1, 650); veil.shake(0.5);
+  await wait(850);
+  veil.shake(1); sound.play('enter');
+  await rush.to('flash', 1, 160);
+  await veil.close('iris', 220);
+  rush.k = 0;
   const z = Math.floor(n / 4), j = n % 4, zone = ZONES[z];
   const foe = FOES[n], target = PALIERS[j];
   const myStart = j === 0 || done() ? 0 : save.score, oppStart = j === 0 ? 0 : PALIERS[j - 1];
@@ -253,10 +274,14 @@ async function startDuel(n) {
   sound.stopMusic(); sound.startMusic('table');
   await wait(260);
   busy = false;
-  veil.open(800);
-  await wait(350);
-  play.banner(foe.name, zone.name + (foe.boss ? ' · le maître des lieux' : ''));
-  await wait(500);
+  veil.open(700); rush.to('flash', 0, 700);
+  const dc = $('#duelcard');
+  dc.querySelector('small').textContent = zone.name; dc.querySelector('b').textContent = foe.name; dc.querySelector('span').textContent = (foe.boss ? 'Le maître des lieux · ' : '') + 'premier à ' + target;
+  dc.classList.remove('show'); void dc.offsetWidth; dc.classList.add('show');
+  setTimeout(() => sound.play('bust'), 350);
+  await wait(2300);
+  document.body.classList.remove('lbox');
+  await wait(300);
   if (session?.match !== match) return;
   try { await match.run(); } catch (e) { if (e?.message !== 'aborted') console.error(e); }
 }
@@ -321,5 +346,30 @@ addEventListener('keydown', (e) => {
   if (cardView.isOpen) { if (!cardView.reward) cardView.close(); return; }
   if (current === 'game' && session) setPause(!paused);
 });
-window.__vii = { veil, play, cardView, go, inspect, get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause, show };
+// ── outils de test ───────────────────────────────────────────
+function devJump(node) {
+  if (session) { session.match.aborted = true; play.cancelPrompts(); session = null; }
+  save.node = Math.max(0, Math.min(12, node)); save.ranks = []; for (let i = 1; i <= save.node; i++) save.ranks.push(i); save.score = 0;
+  persist(); clearFaces();
+  go(() => { play.closeOverlay(); cardView.close(); sound.startMusic('menu'); openMenu(); });
+}
+if (DEV) {
+  const d = document.createElement('div'); d.id = 'dev';
+  d.innerHTML = `<button data-d="open">dev</button><div class="dev-list hidden">
+    <button data-d="win">Gagner ce duel</button><button data-d="next">Duel suivant</button><button data-d="zone">Lieu suivant</button>
+    <button data-d="end">Boss final</button><button data-d="reset">Recommencer l'histoire</button></div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-d]')?.dataset.d; if (!k) return;
+    const list = d.querySelector('.dev-list');
+    if (k === 'open') return list.classList.toggle('hidden');
+    list.classList.add('hidden');
+    if (k === 'win') { if (session) { session.match.aborted = true; play.cancelPrompts(); play.onGameOver({ winner: 'you' }); } else devJump(save.node + 1); }
+    if (k === 'next') devJump(save.node + 1);
+    if (k === 'zone') devJump((Math.floor(save.node / 4) + 1) * 4);
+    if (k === 'end') devJump(11);
+    if (k === 'reset') { try { localStorage.removeItem(KEY); } catch { /* */ } location.href = location.pathname; }
+  });
+}
+window.__vii = { rush, veil, play, cardView, go, inspect, get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause, show };
 boot();
