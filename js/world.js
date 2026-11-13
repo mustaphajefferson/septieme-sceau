@@ -716,17 +716,31 @@ export function buildFoe(kit = {}) {
   if (kit.sword === 'bourreau') { const sw = at(new THREE.Group(), 0.55, 0, -0.2); sw.rotation.z = 0.1; root.add(sw); sw.add(at(box(0.11, 1.1, 0.015, M.metal), 0, 0.6, 0)); sw.add(at(box(0.36, 0.04, 0.04, M.metalDark), 0, 1.16, 0)); sw.add(at(box(0.04, 0.3, 0.04, M.clothDark), 0, 1.33, 0)); }
   if (kit.shield) { const sh = at(new THREE.Group(), -0.48, 0.75, -0.2); sh.rotation.y = 0.5; root.add(sh); sh.add(box(0.45, 0.55, 0.04, M.wood)); sh.add(at(box(0.06, 0.5, 0.05, M.metal), 0, 0, -0.01)); sh.add(at(box(0.4, 0.06, 0.05, M.metal), 0, 0.08, -0.01)); }
   if (kit.head === 'kettle') { const cb = at(new THREE.Group(), 0.45, 0.95, -0.4); root.add(cb); cb.add(at(box(0.05, 0.05, 0.6, M.wood), 0, 0, 0)); cb.add(at(box(0.5, 0.03, 0.03, M.metalDark), 0, 0.02, -0.25)); }
+  brighten(root);
   return seated(root, head, { tick: (t) => ticks.forEach((f) => f(t)) });
+}
+// les adversaires doivent se lire d'un coup d'œil : pas de métal « miroir » (sans reflet, il paraît noir),
+// des teintes relevées et une lueur propre très légère
+const BRIGHT = new Map();
+function brighten(root) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material?.isMeshStandardMaterial || o.material.transparent) return;
+    const m0 = o.material;
+    if (!BRIGHT.has(m0)) {
+      const m = m0.clone(), c = m.color.clone(), l = c.getHSL({}).l;
+      m.metalness = Math.min(m.metalness, 0.12); m.roughness = Math.max(0.55, m.roughness);
+      m.color.copy(c.offsetHSL(0, 0, Math.max(0, 0.27 - l) * 0.75));
+      m.emissive = m.color.clone().multiplyScalar(0.05);
+      BRIGHT.set(m0, m);
+    }
+    o.material = BRIGHT.get(m0);
+  });
 }
 
 export function makeCreature(kind, variant = 0) {
   if (kind === 'pelerin') return CREATURES.pelerin(variant);
   if (/^f\d+$/.test(kind)) {
     const f = FOES[+kind.slice(1)];
-    if (f.art) { // dessiné en points par-dessus la scène : ici, un simple repère
-      const root = new THREE.Group(), head = new THREE.Object3D(); head.position.set(0, 1.62, 0); root.add(head); root.userData.illus = f.art;
-      return { root, head, update() {} };
-    }
     return buildFoe(f.kit);
   }
   return CREATURES[kind]();

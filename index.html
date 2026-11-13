@@ -7,42 +7,35 @@
 <meta name="description" content="Douze duels de la Forêt des Pendus au trône du Roi déchu. Jeu de cartes dark fantasy à l'ancienne.">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Cpath d='M3 3h2v10H3zM7 3h2v10H7zM11 3h2v10h-2z' fill='%23e8dcae'/%3E%3C/svg%3E">
-<link rel="preload" href="fonts/grenze-gotisch-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/grenze-gotisch-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/jacquard-24-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="veiled">
-<canvas id="asc" aria-hidden="true"></canvas>
 <canvas id="gl" aria-hidden="true"></canvas>
-<canvas id="ill" aria-hidden="true"></canvas>
-<div id="sframe" aria-hidden="true"><i class="band"></i><svg id="sframe-svg"></svg></div>
 <div id="grain" aria-hidden="true"></div>
 
 <main id="app">
 
-  <!-- ═══ ACCUEIL : la taverne sous la pluie ═══ -->
+  <!-- ═══ ACCUEIL : le lieu du prochain duel ═══ -->
   <section id="title" class="screen on">
     <div class="full" data-gl></div>
     <header class="t-head">
-      <span class="vol">Vol. I</span>
       <h1 class="logo">VII</h1>
       <p class="logo-sub">Le Septième Sceau</p>
     </header>
-    <footer class="t-foot">
-      <p class="tag">— Guide officiel du pèlerin —</p>
-      <button id="enter" class="press" disabled>Les âmes s'éveillent…</button>
-    </footer>
+    <footer class="t-foot"><button id="enter" class="dbtn" disabled><span>Les âmes s'éveillent…</span></button></footer>
   </section>
 
   <!-- ═══ LE SEUIL : la scène, deux choix ═══ -->
   <section id="menu" class="screen">
     <div class="full" data-gl></div>
     <header class="t-head small"><h1 class="logo">VII</h1></header>
-    <div class="seuil-ui">
-      <p class="next-line"><span id="m-zone">—</span> · <b id="m-foe">—</b> · <span id="m-tier">—</span></p>
+    <div class="seuil">
+      <div class="next"><small id="m-zone">—</small><b id="m-foe">—</b><span id="m-tier">—</span></div>
       <div class="two">
-        <button id="m-go" class="thorn"><span>Continuer</span></button>
-        <button id="m-deck" class="thorn"><span>Deck</span></button>
+        <button id="m-go" class="dbtn big warm"><span>Continuer</span></button>
+        <button id="m-deck" class="dbtn big"><span>Deck</span></button>
       </div>
     </div>
   </section>
@@ -52,65 +45,52 @@
     <div class="full" data-gl></div>
     <header class="deck-h"><h2>Ton deck</h2><p id="deck-count"></p></header>
     <p id="deck-tip" class="deck-tip"></p>
-    <button class="back gbtn small" data-back><span>Retour</span></button>
+    <button class="back dbtn" data-back><span>Retour</span></button>
   </section>
 
   <!-- ═══ LA TABLE ═══ -->
   <section id="game" class="screen">
     <div class="full" data-gl></div>
-    <div id="plates"></div>
-    <div id="hand"></div>
     <div id="party"></div>
-    <button id="pause" class="hud-btn pause-btn" title="Pause (Échap)"><span data-icon="hourglass"></span></button>
+    <button id="pause" title="Pause (Échap)" aria-label="Pause"><span class="pz-ic" data-icon="hourglass"></span></button>
     <div id="banner"></div>
-    <div id="log" class="hud-frame" hidden><ol></ol><input id="chat-in" hidden></div>
     <div id="say"></div>
     <div id="bar">
-      <div class="slots">
-        <button id="b-hit" class="slot" disabled title="Arracher une âme (1)"><span data-icon="grab"></span><kbd>1</kbd><em>Arracher</em></button>
-        <button id="b-stay" class="slot" disabled title="Se retirer (2)"><span data-icon="fist"></span><kbd>2</kbd><em>Se retirer</em></button>
-      </div>
+      <button id="b-hit" class="act hit" disabled title="Arracher une carte (1)"><span class="act-fill"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="act-ring"></span><span class="act-ic" data-icon="grab"></span><span class="act-tx"><b>Arracher</b><small>risque <u id="risk-n">0</u> %</small></span><kbd>1</kbd></button>
+      <button id="b-stay" class="act stay" disabled title="Se retirer (2)"><span class="act-ring"></span><span class="act-ic" data-icon="fist"></span><span class="act-tx"><b>Se retirer</b><small>garder <u id="keep-n">0</u></small></span><kbd>2</kbd></button>
     </div>
-    <div hidden><b id="g-round"></b><b id="g-deck"></b><b id="g-hand"></b><span class="omen"><u id="g-risk"></u></span><span id="g-buffs"></span><i id="g-xp"></i><i id="g-xp2"></i><b id="g-total"></b><b id="g-target"></b></div>
     <div id="g-overlay" class="hidden"></div>
-    <div id="pause-menu" class="hidden">
-      <div class="sheet velin frame">
-        <header class="sheet-h"><span class="orn" data-icon="skull"></span><h2>Pause</h2><span class="orn" data-icon="skull"></span></header>
+    <div id="pause-menu" class="page-overlay hidden">
+      <div class="dpanel pausebox">
+        <h2>Pause</h2>
         <p class="sub" id="pz-info"></p>
-        <ol class="rows" id="pz-rows"></ol>
+        <div id="pz-rows"></div>
         <p class="sub" id="pz-deck"></p>
-        <div class="btns"><button class="btn" data-p="resume">Reprendre</button><button class="btn ghost" data-p="sound">Son : <b>actif</b></button><button class="btn ghost" data-p="flee">Fuir la table</button></div>
+        <div class="stack">
+          <button class="dbtn warm" data-p="resume"><span>Reprendre</span></button>
+          <button class="dbtn" data-p="sound"><span>Son : <b>actif</b></span></button>
+          <button class="dbtn" data-p="flee"><span>Fuir la table</span></button>
+        </div>
       </div>
     </div>
   </section>
-  <!-- ═══ LE BUTIN ═══ -->
-  <section id="spoils" class="screen">
-    <article class="page velin solo-page">
-      <header class="page-h"><span id="sp-zone">—</span><span class="ix">ix</span></header>
-      <div class="banner-h"><span data-icon="seal"></span><h2 id="sp-title">—</h2><span data-icon="seal"></span></div>
-      <p class="lead" id="sp-lead"></p>
-      <div class="won"><div class="flip"><img class="f" id="sp-card" alt=""><img class="b" id="sp-back" alt=""></div></div>
-      
-      <div id="sp-relics" class="relic-pick"></div>
-    </article>
-  </section>
+
+  <!-- ═══ LE BUTIN (la carte gagnée s'affiche par-dessus) ═══ -->
+  <section id="spoils" class="screen"></section>
 
   <!-- ═══ LA MORT ═══ -->
   <section id="death" class="screen">
-    <article class="page fange solo-page">
-      <header class="page-h"><span id="dt-zone">—</span><span class="ix">x</span></header>
-      <div class="banner-h"><span data-icon="skull"></span><h2>Les âmes te réclament</h2><span data-icon="skull"></span></div>
-      <div class="dead"><div class="arch"><img id="dt-img" alt=""></div></div>
-      <p class="lead" id="dt-lead"></p>
-      <button class="gbtn" id="dt-go"><span>Renaître</span></button>
-    </article>
+    <div class="full" data-gl></div>
+    <div class="dpanel deathbox">
+      <h2>Les âmes te réclament</h2>
+      <div class="dead"><img id="dt-img" alt=""></div>
+      <p id="dt-lead"></p>
+      <button class="dbtn warm" id="dt-go"><span>Renaître</span></button>
+    </div>
   </section>
 </main>
 <canvas id="veil" aria-hidden="true"></canvas>
-<div id="cardview" class="hidden"><div class="cv-card"><img alt=""><i class="holo"></i></div></div>
-
-<div id="modal" class="hidden" role="dialog" aria-modal="true"><div class="sheet velin"><button class="link modal-x" data-close>✕</button><div class="modal-body"></div></div></div>
-<div id="toast" class="hidden"></div>
+<div id="cardview" class="hidden"></div>
 
 <script type="module" src="js/main.js"></script>
 </body>

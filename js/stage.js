@@ -90,14 +90,13 @@ export class Stage {
       cr.root.lookAt(V3(TABLE.c.x, 0, TABLE.c.z)); cr.root.rotateY(Math.PI);
       cr.root.traverse((o) => { o.userData.pid = p.id; });
       this.scene.add(cr.root);
-      if (cr.root.userData.illus) { this.lookBase.y = 1.1; this.seats.set(p.id, { pid: p.id, a, d, creature: cr, base: sp.clone(), kind, illus: cr.root.userData.illus }); return; }
-      const fl = new THREE.PointLight(0xe8e8d0, 6, 2.8, 1.0);
+            const fl = new THREE.PointLight(0xe8e8d0, 6, 3.2, 1.0);
       fl.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.2))); fl.position.y = 1.35;
       this.scene.add(fl); cr.root.userData.fill = fl;
-      const face = new THREE.SpotLight(0xfff0d8, 16, 5, 0.45, 0.5, 1.0);
+      const face = new THREE.SpotLight(0xfff0d8, 14, 5, 0.5, 0.5, 1.0);
       face.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.6))); face.position.y = 1.15;
       face.target.position.copy(sp).setY(1.6); this.scene.add(face, face.target); fl.userData.face = face;
-      const rimL = new THREE.SpotLight(0xd8e8c0, 30, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;
+      const rimL = new THREE.SpotLight(0xd8e8c0, 34, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;
       rimL.target.position.copy(sp).setY(1.3); this.scene.add(rimL, rimL.target); face.userData.rim = rimL;
       this.seats.set(p.id, { pid: p.id, a, d, creature: cr, base: sp.clone(), kind });
     });
@@ -110,8 +109,8 @@ export class Stage {
     if (!kind) return;
     const cr = makeCreature(kind);
     const a = 0.95, d = V3(Math.sin(a), 0, -Math.cos(a));
-    const sp = TABLE.c.clone().add(d.multiplyScalar(TABLE.r + 0.75)); sp.y = 0.45;
-    cr.root.position.copy(sp); cr.root.scale.setScalar(1.1);
+    const sp = TABLE.c.clone().add(d.multiplyScalar(TABLE.r + 1.05)); sp.y = 0.3;
+    cr.root.position.copy(sp); cr.root.scale.setScalar(0.95);
     cr.root.lookAt(V3(TABLE.c.x, 0.45, TABLE.c.z)); cr.root.rotateY(Math.PI);
     this.scene.add(cr.root);
     this.dealer = cr;
@@ -355,7 +354,7 @@ export class Stage {
     this.deckCards = [];
     rows.forEach((row, r) => row.forEach((it, c) => {
       const k = this.deckCards.length;
-      const m = makeCardMesh(it.locked ? backTex() : faceTex(it.card), backTex());
+      const m = makeCardMesh(faceTex(it.card), backTex());
       const x = (c - (row.length - 1) / 2) * gw, z = z0 + r * gh + (it.card.relic && !tall ? 0.04 : 0);
       // chaque carte part du paquet, face cachée, et vient se poser à sa place
       const pos = V3(x, TABLE.c.y + 0.004, z), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, Math.sin(k * 7.3) * 0.05, 0, 'YXZ'));
@@ -363,7 +362,7 @@ export class Stage {
       m.quaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
       m.userData = { ...m.userData, deck: it, base: pos, anim: true };
       this.wait(350 + k * 70).then(() => { if (!this.deckCards.includes(m)) return; onCard?.(k); return this.moveCard(m, pos, q, 460, { arc: 0.16 }); });
-      if (it.locked) m.material.forEach((mt) => mt.color?.setScalar?.(0.45));
+      if (it.locked) m.material.forEach((mt) => mt.color?.setScalar?.(0.62));
       this.scene.add(m); this.deckCards.push(m);
     }));
   }
@@ -374,6 +373,8 @@ export class Stage {
     if (this.bowl) this.bowl.visible = this.fosseFill.visible = true;
     this.camBase = V3(0, 1.3, 0.32); this.lookBase = V3(0, 0.98, -1.05);
   }
+  /** après le chargement des polices : redessine le dos du paquet */
+  refreshBack() { const m = this.stack.material[2]; m.map = backTex(); m.needsUpdate = true; }
   deckAt(nx, ny) {
     this.ray.setFromCamera({ x: nx, y: ny }, this.camera);
     return this.ray.intersectObjects(this.deckCards || [], false)[0]?.object || null;

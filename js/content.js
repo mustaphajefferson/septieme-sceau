@@ -14,7 +14,7 @@ export const ZONES = [
 
 // kit = apparence de l'adversaire (même système que le chevalier)
 export const FOES = [
-  { name: 'Le Pendu du chêne', risk: 0.30, reward: 'cape', art: 'squelette', kit: { body: 'robe', head: 'sack', cape: 1, hands: 'bony', extras: ['noose'] } },
+  { name: 'Le Pendu du chêne', risk: 0.30, reward: 'cape', kit: { body: 'robe', head: 'sack', cape: 1, hands: 'bony', extras: ['noose'] } },
   { name: 'La Sorcière des ronces', risk: 0.24, reward: 'gantelets', kit: { body: 'robe', head: 'hag', gauntlets: 'epines', hands: 'bony' } },
   { name: 'Le Cerf-Pèlerin', risk: 0.34, reward: 'cimier', kit: { body: 'robe', head: 'deer', hands: 'bony' } },
   { name: 'L\'Ermite-Loup', risk: 0.32, reward: 'epaulieres', boss: true, ambiance: 'brume', kit: { body: 'robe', head: 'wolf', pauldrons: 'loup', hands: 'bony' } },
@@ -68,17 +68,3 @@ export const LORE = [
   { title: 'Elle règne sous les douves', text: "Elle s'est jetée du haut des remparts le jour du sacre. Elle porte encore la couronne et l'eau qui coule de son voile ne sèche jamais.", stats: { Avidité: 2, Ruse: 5, Foi: 3, Volonté: 3 }, align: 0.45, items: [['seal', 'Couronne mouillée', 'Elle pèse comme une pierre.'], ['skull', 'Collier de crânes', 'Ses prétendants.']], say: { bust: 'Noie-toi.', win: 'Viens sous l\'eau.', stay: 'Si tôt ?', taunt: 'Plonge.' } },
   { title: 'Le dernier boss : il a perdu son royaume aux cartes', text: "Il a tout misé, une nuit, et tout perdu sauf la couronne. Depuis il rejoue, encore et encore, pour la reprendre à qui l'emporte.", stats: { Avidité: 5, Ruse: 5, Foi: 2, Volonté: 5 }, align: 0.15, items: [['seal', 'Couronne brisée', 'Il manque une pointe.'], ['skull', 'Sceptre de fémur', 'Le sien.']], say: { bust: 'À genoux.', win: 'Le royaume est à moi.', stay: 'Le roi attend.', taunt: 'Mise ton âme.' } },
 ];
-
-// Personnages dessinés (art/*.png, tramés 1 bit). Les zones servent aux animations,
-// en pixels de l'image : tête (ellipse + pivot du cou), orbite, main, fumée, buste (portraits).
-export const ILLUS = {
-  squelette: {
-    url: 'art/squelette.png',
-    head: { cx: 315, cy: 385, rx: 105, ry: 130, px: 335, py: 505 },
-    eye: { x: 277, y: 426, r: 9 },
-    hand: { x0: 400, y0: 385, y1: 520 },
-    smoke: { x0: 462, y1: 392 },
-    bust: [150, 235, 480, 565],
-    top: 110, sink: 692, // lignes visibles : au-dessus → hors champ ; « sink » repose sur le bord de la table
-  },
-};

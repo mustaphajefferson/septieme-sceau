@@ -1,180 +1,120 @@
 // ─────────────────────────────────────────────────────────────
 //  La partie : mise en scène des événements du moteur dans la
-//  scène 3D + interface façon vieux MMO (cadres, jauges, icônes).
+//  scène 3D + l'interface de la table (joueurs, actions, décompte).
 // ─────────────────────────────────────────────────────────────
-import { bustRisk, roman, cardTitle, TARGET, FLIP7_BONUS } from './game.js';
+import { bustRisk, TARGET, FLIP7_BONUS } from './game.js';
 import { Stage } from './stage.js';
 import { sound } from './audio.js';
-import { icon } from './icons.js';
-import { portrait } from './gallery.js';
 import { BESTIAIRE } from './lore.js';
 import { wait } from './fx.js';
-import { HandView } from './handview.js';
 import { PALETTES } from './render.js';
+import { portraitCanvas } from './gallery.js';
+import { icon } from './icons.js';
+import { bayer, abgr } from './dots.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const STATUS_ICON = { stayed: 'fist', frozen: 'frost', bust: 'skull' };
-const cardShort = (c) => (c.t === 'n' ? String(c.v) : c.t === 'm' ? '+' + c.v : c.t === 'x' ? '×2' : { freeze: 'G', three: 'T', chance: 'S' }[c.a]);
-const nice = (s) => String(s).toLowerCase().replace(/(^|\s|'|-)(\S)/g, (m, a, b) => a + b.toUpperCase());
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pct = (v, T) => Math.max(0, Math.min(100, (v / T) * 100));
 
 export class Play {
   constructor(dr) {
     this.dr = dr;
     this.stage = new Stage(dr);
-    this.hand = new HandView($('#hand'));
-    addEventListener('resize', () => this.hand.relayout());
     this.root = $('#game');
     this.canvas = dr.canvas;
-    this.pending = null; this.pendingTarget = null; this._continue = null;
-    this.showRisk = true;
+    this.pending = null; this._continue = null;
     this.hit = $('#b-hit'); this.stay = $('#b-stay');
     this.hit.onclick = () => this.decide('hit');
     this.stay.onclick = () => this.decide('stay');
     addEventListener('keydown', (e) => {
-      if (!this.root.classList.contains('on') || e.target.tagName === 'INPUT') return;
+      if (!this.root.classList.contains('on')) return;
       const k = e.key.toLowerCase();
       if (this.pending && (k === '1' || k === 'a' || k === ' ')) { e.preventDefault(); this.decide('hit'); }
       else if (this.pending && (k === '2' || k === 'r')) { e.preventDefault(); this.decide('stay'); }
       else if (this._continue && (k === 'enter' || k === ' ')) { e.preventDefault(); this._continue(); }
-      else if (k === 'enter' && this.chatEnabled) { e.preventDefault(); $('#chat-in').focus(); }
     });
-    this.canvas.addEventListener('pointermove', (e) => this.onMove(e));
-    this.canvas.addEventListener('click', (e) => this.onClick(e));
-    $('#chat-in').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) this.onChat?.(v); e.target.value = ''; e.target.blur(); }
-      if (e.key === 'Escape') e.target.blur();
-    });
+    this.canvas.addEventListener('pointermove', (e) => { const [x, y] = this.ndc(e); this.stage.mouse.x += (x - this.stage.mouse.x) * 0.5; this.stage.mouse.y += (y - this.stage.mouse.y) * 0.5; });
+    this.canvas.addEventListener('click', (e) => { if (!this.root.classList.contains('on')) return; const c = this.stage.cardAt(...this.ndc(e)); if (c) this.onInspect?.(c); });
   }
+  ndc(e) { const r = this.canvas.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1]; }
 
   // ── montage ────────────────────────────────────────────────
-  mount(snap, you, { helms = {} } = {}) {
-    this.you = you; this.snap = snap; this.helms = helms;
-    this.players = snap.players.map((p) => ({ ...p }));
-    this.names = Object.fromEntries(snap.players.map((p) => [p.id, p.name]));
+  mount(snap, you) {
+    this.you = you; this.snap = snap;
+    this.names = Object.fromEntries(snap.players.map((p) => [p.id, p.id === you ? 'Pèlerin' : BESTIAIRE[p.persona]?.name || p.name]));
     this.stage.setPlayers(snap.players, you);
     this.stage.holdR = false; this.stage.holdL = false;
     this.stage.layout(snap, { instant: true });
     this.stage.setDeckCount(snap.deckCount);
     this.buildParty(snap);
-    this.buildPlates(snap);
-    $('#log ol').innerHTML = '';
-    $('#g-overlay').className = 'hidden'; $('#g-overlay').innerHTML = '';
+    this.closeOverlay();
     this.sync(snap);
     const foe = snap.players.find((p) => p.id !== you);
     const l = foe && this.creatureSay(foe.id, 'taunt'); if (l) this.say(l[0], [l[1]]);
   }
-
   T() { return this.snap?.target || TARGET; }
-  kindOf(p) { return p.kind === 'ai' ? p.persona : 'pelerin'; }
-  portraitOf(p, w = 64, h = 72) {
-    return portrait(this.dr, this.kindOf(p), { variant: this.helms[p.id] ?? 0, palette: 'fange', w, h });
-  }
   who(pid) { return pid === this.you ? 'Toi' : this.names[pid] || '…'; }
   is(pid) { return pid === this.you; }
   creatureSay(pid, key) {
-    const p = this.snap.players.find((x) => x.id === pid);
-    const b = p?.kind === 'ai' ? BESTIAIRE[p.persona] : null;
+    const p = this.snap.players.find((x) => x.id === pid), b = p?.kind === 'ai' ? BESTIAIRE[p.persona] : null;
     return b?.say?.[key] ? [b.name, b.say[key]] : null;
   }
 
+  // ── les deux joueurs, en haut à gauche ─────────────────────
   buildParty(snap) {
-    const box = $('#party');
-    box.innerHTML = '';
-    const order = [snap.players.find((p) => p.id === this.you), ...snap.players.filter((p) => p.id !== this.you)];
-    for (const p of order) {
-      const el = document.createElement('button');
-      el.className = 'pf' + (this.is(p.id) ? ' me' : '');
-      el.dataset.pid = p.id;
-      el.innerHTML = `
-        <span class="pf-img"><img alt="" src="${this.portraitOf(p)}"></span>
-        <span class="pf-body">
-          <span class="pf-name">${esc(this.is(p.id) ? p.name : (BESTIAIRE[p.persona]?.name || p.name))}</span>
-          <span class="gauge"><i class="g1"></i><i class="g2"></i><b class="gv">0</b></span>
-          <span class="pf-cards"></span>
-        </span>
-        <span class="pf-st"></span>`;
-      el.onclick = () => this.pickTarget(p.id);
-      box.appendChild(el);
-    }
-  }
-
-  buildPlates(snap) {
-    const box = $('#plates');
-    box.innerHTML = '';
-    for (const p of snap.players) {
-      if (this.is(p.id)) continue;
+    const box = $('#party'); box.innerHTML = '';
+    for (const p of [snap.players.find((q) => this.is(q.id)), ...snap.players.filter((q) => !this.is(q.id))]) {
       const el = document.createElement('div');
-      el.className = 'plate'; el.dataset.pid = p.id;
-      el.innerHTML = `<span class="pl-name">${esc(BESTIAIRE[p.persona]?.name || p.name)}</span><span class="pl-cards"></span><span class="pl-st"></span>`;
+      el.className = 'pf' + (this.is(p.id) ? ' me' : ''); el.dataset.pid = p.id;
+      el.innerHTML = `<span class="pf-face"><img alt="" src="${this.face(p)}"></span>
+        <span class="pf-id"><span class="pf-name">${esc(this.names[p.id])}</span><span class="pf-tag"></span></span>
+        <b class="pf-score"><span>0</span><small>/ ${this.T()}</small></b>
+        <span class="gauge"><i class="g1"></i><i class="g2"></i></span>
+        <span class="pf-cards"></span>`;
       box.appendChild(el);
     }
   }
-
+  /** médaillon : le visage de la créature (ou du pèlerin), rendu tramé aux couleurs du lieu */
+  face(p) {
+    const pal = this.dr.paletteName in PALETTES ? this.dr.paletteName : 'velin', k = (p.persona || 'pelerin') + pal;
+    this._faces ||= new Map();
+    if (!this._faces.has(k)) { try { this._faces.set(k, portraitCanvas(this.dr, p.kind === 'ai' ? p.persona : 'pelerin', { palette: pal, w: 72, h: 84 }).toDataURL()); } catch { this._faces.set(k, ''); } }
+    return this._faces.get(k);
+  }
   sync(snap) {
     this.snap = snap;
-    $('#g-deck').textContent = snap.deckCount;
-    $('#g-round').textContent = roman(snap.round || 1);
+    const T = this.T();
     for (const p of snap.players) {
-      const pf = $(`#party [data-pid="${p.id}"]`);
-      if (pf) {
-        pf.classList.toggle('turn', snap.turn === p.id);
-        pf.classList.toggle('out', p.status !== 'active');
-        pf.querySelector('.g1').style.width = Math.min(100, (p.score / this.T()) * 100) + '%';
-        const g2 = pf.querySelector('.g2');
-        g2.style.left = Math.min(100, (p.score / this.T()) * 100) + '%';
-        g2.style.width = Math.max(0, Math.min(100 - (p.score / this.T()) * 100, (p.hand / this.T()) * 100)) + '%';
-        pf.querySelector('.gv').textContent = p.score + (p.hand && p.status !== 'bust' ? ' +' + p.hand : '');
-        if (!this.is(p.id)) pf.querySelector('.pf-cards').innerHTML = [...p.nums, ...p.mods].map((c) => `<i class="${c.dup ? 'dup' : ''}">${cardShort(c)}</i>`).join('');
-        pf.querySelector('.pf-st').innerHTML = p.flip7 ? icon('seal') : STATUS_ICON[p.status] ? icon(STATUS_ICON[p.status]) : snap.turn === p.id ? icon('candle', 'blink') : '';
-      }
-      const pl = $(`#plates [data-pid="${p.id}"]`);
-      if (pl) {
-        pl.classList.toggle('turn', snap.turn === p.id);
-        pl.classList.toggle('out', p.status !== 'active');
-        pl.querySelector('.pl-cards').innerHTML = [...p.nums, ...p.mods, ...(p.chance ? [p.chance] : [])].map((c) => `<i class="${c.dup ? 'dup' : ''} ${c.t !== 'n' ? 'alt' : ''}">${cardShort(c)}</i>`).join('');
-        pl.querySelector('.pl-st').innerHTML = p.flip7 ? icon('seal') : STATUS_ICON[p.status] ? icon(STATUS_ICON[p.status]) : '';
-      }
+      const pf = $(`#party [data-pid="${p.id}"]`); if (!pf) continue;
+      const bust = p.status === 'bust', hand = bust ? 0 : p.hand;
+      pf.classList.toggle('turn', snap.turn === p.id);
+      pf.classList.toggle('bust', bust);
+      const sc = pf.querySelector('.pf-score');
+      if (sc.firstElementChild.textContent !== String(p.score)) { sc.firstElementChild.textContent = p.score; sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }
+      pf.querySelector('.g1').style.width = pct(p.score, T) + '%';
+      const g2 = pf.querySelector('.g2'); g2.style.left = pct(p.score, T) + '%'; g2.style.width = Math.min(100 - pct(p.score, T), pct(hand, T)) + '%';
+      pf.querySelector('.pf-tag').textContent = bust ? 'profané' : p.flip7 ? 'sept sceaux' : p.status === 'stayed' ? 'retiré' : snap.turn === p.id ? (this.is(p.id) ? 'à toi' : 'joue…') : '';
+      // la liste des cartes : on n'ajoute que les nouvelles, pour qu'elles seules s'animent
+      const box = pf.querySelector('.pf-cards'), n = p.nums.length, first = p.nums[0]?.id ?? null;
+      if (first !== pf._first || n < (pf._n || 0)) box.innerHTML = '';
+      box.querySelector('.pf-sum')?.remove(); box.querySelector('.pf-none')?.remove();
+      const chips = box.querySelectorAll('.chip');
+      p.nums.forEach((c, i) => { let ch = chips[i]; if (!ch) { ch = document.createElement('i'); ch.className = 'chip'; ch.textContent = c.v; box.appendChild(ch); } ch.classList.toggle('dup', !!c.dup); });
+      pf._first = first; pf._n = n;
+      if (n) { const sm = document.createElement('b'); sm.className = 'pf-sum'; sm.textContent = '+' + p.hand; box.appendChild(sm); } else box.innerHTML = '<span class="pf-none">aucune carte</span>';
       if (this.is(p.id)) {
-        $('#g-hand').textContent = p.status === 'bust' ? '0' : p.hand;
-        const r = p.status === 'active' ? bustRisk(snap, p.id) : 0;
-        $('#g-risk').style.width = Math.round(r * 100) + '%';
-        $('.omen').title = 'Présage de profanation : ' + Math.round(r * 100) + '%';
-        $('.omen').classList.toggle('hot', r >= 0.3);
-        $('.omen').style.display = this.showRisk ? '' : 'none';
-        $('#g-buffs').innerHTML = [...p.nums, ...p.mods, ...(p.chance ? [p.chance] : [])].map((c) => `<i class="${c.dup ? 'dup' : ''} ${c.t !== 'n' ? 'alt' : ''}" title="${esc(nice(cardTitle(c)))}">${cardShort(c)}</i>`).join('');
-        $('#g-xp').style.width = Math.min(100, (p.score / this.T()) * 100) + '%';
-        $('#g-xp2').style.left = Math.min(100, (p.score / this.T()) * 100) + '%';
-        $('#g-xp2').style.width = Math.max(0, Math.min(100 - (p.score / this.T()) * 100, ((p.status === 'bust' ? 0 : p.hand) / this.T()) * 100)) + '%';
-        $('#g-total').textContent = p.score;
+        const r = p.status === 'active' && p.nums.length ? bustRisk(snap, p.id) : 0;
+        this.hit.style.setProperty('--risk', Math.round(r * 100));
+        this.hit.classList.toggle('hot', r >= 0.25);
+        $('#risk-n').textContent = Math.round(r * 100);
+        $('#keep-n').textContent = hand;
       }
     }
   }
 
   // ── boucle (appelée par main) ──────────────────────────────
-  frame(dt) {
-    this.stage.update(dt);
-    this.stage.render();
-    if (this.fig && this.figPid) { const g = this.stage.figGeom(this.figPid); if (g) this.fig.render(this.stage.t, dt, g, PALETTES[this.dr.paletteName] || PALETTES.fange); }
-    const r = this.canvas.getBoundingClientRect();
-    for (const pl of document.querySelectorAll('#plates .plate')) {
-      const s = this.stage.screenOf(pl.dataset.pid, r.width, r.height);
-      if (!s || !s.vis) { pl.style.display = 'none'; continue; }
-      pl.style.display = '';
-      if (s.x < 40 || s.x > r.width - 40) { pl.style.display = 'none'; continue; }
-      const x = s.x, y = Math.max(r.width < 860 ? 150 : 74, s.y);
-      pl.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
-    }
-  }
+  frame(dt) { this.stage.update(dt); this.stage.render(); }
 
-  // ── journal / paroles ──────────────────────────────────────
-  log(html, cls = '') {
-    const ol = $('#log ol');
-    const li = document.createElement('li'); li.className = cls; li.innerHTML = html;
-    ol.appendChild(li);
-    while (ol.children.length > 40) ol.firstChild.remove();
-    ol.scrollTop = ol.scrollHeight;
-  }
   say(speaker, lines, ms = 2600) {
     const box = $('#say');
     box.innerHTML = (speaker ? `<span class="who">${esc(speaker)}</span>` : '') + lines.map((l) => `<span class="ln">${esc(l)}</span>`).join('');
@@ -182,26 +122,19 @@ export class Play {
     clearTimeout(this._sayT);
     this._sayT = setTimeout(() => box.classList.remove('show'), ms / this.stage.speed);
   }
+  banner(text, sub = '') {
+    const b = $('#banner');
+    b.innerHTML = `<span>${esc(text)}</span>` + (sub ? `<small>${esc(sub)}</small>` : '');
+    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+  }
 
   // ── événements ─────────────────────────────────────────────
   async present(ev, snap) {
     const st = this.stage;
-    const fig = this.figPid ? this.fig : null, foeEv = ev.pid && ev.pid === this.figPid;
-    if (fig) switch (ev.type) { // le dessin vit : il tend la main, sursaute, te fixe
-      case 'roundStart': fig.look(0); fig.stare(0.3); break;
-      case 'turn': fig.look(foeEv ? -0.5 : 0.7); fig.stare(foeEv ? 0.25 : 0.85); break;
-      case 'reveal': if (foeEv) fig.reach(); break;
-      case 'bust': if (foeEv) { fig.jolt(1.4); fig.stare(0); } else { fig.jolt(0.3); fig.stare(1); fig.look(1); } this.veil?.shake(1.6); break;
-      case 'stay': if (foeEv) { fig.look(1); fig.reach(300); } break;
-      case 'flip7': fig.jolt(foeEv ? 0.5 : 0.9); this.veil?.shake(1); break;
-    } else if (ev.type === 'bust') this.veil?.shake(1.6);
     switch (ev.type) {
-      case 'gameStart':
-        this.sync(snap);
-        await st.wait(600);
-        break;
+      case 'gameStart': this.sync(snap); await st.wait(600); break;
 
-      case 'roundStart': {
+      case 'roundStart':
         this.closeOverlay();
         st.setHolding(false, false);
         await this.sweep();
@@ -209,28 +142,18 @@ export class Play {
         st.setDeckCount(snap.deckCount);
         this.sync(snap);
         sound.play('toll');
-        this.log(`<b>Manche ${roman(ev.round)}</b>`, 'sys');
-        this.banner('Manche ' + roman(ev.round));
+        this.banner('Manche ' + ev.round);
         await st.wait(1000);
         break;
-      }
 
-      case 'turn':
-        st.focus = ev.pid;
-        this.sync(snap);
-        break;
+      case 'turn': st.focus = ev.pid; this.sync(snap); break;
 
       case 'reveal':
         st.focus = ev.pid;
         this.sync(snap);
-        if (this.is(ev.pid)) {
-          sound.play('whoosh');
-          await st.meDrawTable(ev.card);
-          sound.play('flip');
-          await st.wait(380);
-        }
-        else { sound.play('whoosh'); await st.oppDraw(ev.pid, ev.card); sound.play('flip'); await st.wait(420); }
-        this.log(`${esc(this.who(ev.pid))} · <em>${esc(nice(cardTitle(ev.card)))}</em>`);
+        sound.play('whoosh');
+        if (this.is(ev.pid)) { await st.meDrawTable(ev.card); sound.play('flip'); await st.wait(380); }
+        else { await st.oppDraw(ev.pid, ev.card); sound.play('flip'); await st.wait(420); }
         break;
 
       case 'gain':
@@ -247,86 +170,33 @@ export class Play {
         st.paletteFlash('sang', 1300);
         const s = st.seats.get(ev.pid); if (s) s.mood = 1;
         setTimeout(() => { if (s) s.mood = 0; }, 1500);
-        this.log(`${esc(this.who(ev.pid))} · <b>Profanation</b> (${roman(ev.value)})`, 'bad');
         const foeId = this.snap.players.find((p) => !this.is(p.id))?.id;
-        const line = this.is(ev.pid) ? (this.creatureSay(foeId, 'win') || ['', 'Elles se sont reconnues.']) : (this.creatureSay(ev.pid, 'bust') || ['', 'Profanation.']);
+        const line = this.is(ev.pid) ? this.creatureSay(foeId, 'win') || ['', 'Elles se sont reconnues.'] : this.creatureSay(ev.pid, 'bust') || ['', 'Profanation.'];
         this.say(line[0], [line[1]]);
         await st.wait(1500);
         break;
       }
 
-      case 'saved':
-        await Promise.all([st.settleCard(ev.card, 'fosse', snap), st.settleCard(ev.chance, 'fosse', snap)]);
-        st.layout(snap); this.sync(snap);
-        sound.play('chance'); st.pulse(ev.pid, 1);
-        this.log(`${esc(this.who(ev.pid))} · <b>Sursis</b>`);
-        await st.wait(800);
-        break;
-
       case 'flip7':
         this.sync(snap);
         sound.play('flip7'); st.flashDither('flash', 260); st.ring(ev.pid);
-        this.log(`${esc(this.who(ev.pid))} · <b>Sept Sceaux</b> +${FLIP7_BONUS}`, 'good');
         this.banner('Les Sept Sceaux');
+        this.say('', [`${this.who(ev.pid)} : sept cartes, +${FLIP7_BONUS}`], 2200);
         await st.wait(1800);
         break;
 
-      case 'stay': {
+      case 'stay':
         st.layout(snap); this.sync(snap);
         sound.play('stay');
-        const p = snap.players.find((q) => q.id === ev.pid);
-        this.log(`${esc(this.who(ev.pid))} · se retire (${p.hand})`);
         if (!this.is(ev.pid)) { const l = this.creatureSay(ev.pid, 'stay'); if (l && Math.random() < 0.5) this.say(l[0], [l[1]], 1800); }
         await st.wait(500);
         break;
-      }
 
-      case 'freeze':
-        await st.settleCard(ev.card, 'fosse', snap);
-        st.layout(snap); this.sync(snap);
-        sound.play('freeze'); st.burst(ev.to, 'frost', 90);
-        this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Givre</b>`);
-        await st.wait(1000);
-        break;
-
-      case 'three':
-        await st.settleCard(ev.card, 'fosse', snap);
-        this.sync(snap);
-        sound.play('three'); st.pulse(ev.to, 3);
-        this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Trois Glas</b>`);
-        await st.wait(1500);
-        break;
-
-      case 'toll':
-        st.focus = ev.pid; this.sync(snap);
-        await st.wait(200);
-        break;
-
-      case 'setAside':
-      case 'give':
-        await st.settleCard(ev.card, ev.type === 'give' ? ev.to : ev.pid, snap);
-        st.layout(snap); this.sync(snap);
-        if (ev.type === 'give') { sound.play('chance'); this.log(`${esc(this.who(ev.from))} → ${esc(this.who(ev.to))} · <b>Sursis</b>`); }
-        await st.wait(300);
-        break;
-
-      case 'void':
-        await st.settleCard(ev.card, 'fosse', snap);
-        this.sync(snap);
-        sound.play('freeze'); st.burst(ev.pid, 'ember', 90); st.shake(0.012);
-        this.say('', ['La relique se refuse à ' + this.who(ev.pid) + '.'], 1800);
-        await st.wait(700);
-        break;
-
-      case 'discard':
-        await st.settleCard(ev.card, 'fosse', snap);
-        this.sync(snap);
-        break;
+      case 'discard': await st.settleCard(ev.card, 'fosse', snap); this.sync(snap); break;
 
       case 'reshuffle':
         sound.play('reshuffle');
         st.setDeckCount(snap.deckCount);
-        this.log('La Fosse retourne à l\'Ossuaire.', 'sys');
         await st.wait(700);
         break;
 
@@ -334,45 +204,34 @@ export class Play {
         this.sync(snap);
         sound.setTension(0);
         st.focus = null;
-        await this.showRoundEnd(ev, snap, { gate: this.gate !== false });
+        await this.showRoundEnd(ev, snap);
         break;
 
-      case 'gameOver':
+      case 'gameOver': {
         this.sync(snap);
-        if (this.onGameOver) { sound.play(ev.winner === this.you ? 'win' : 'lose'); if (ev.winner === this.you) { this.stage.flashDither('flash', 400); this.stage.ring(this.you); } else { this.stage.shake(0.05); this.stage.paletteFlash('sang', 2500); } await this.stage.wait(1600); this.onGameOver(ev, snap); break; }
-        await this.showGameOver(ev, snap);
+        const won = ev.winner === this.you;
+        sound.play(won ? 'win' : 'lose');
+        if (won) { st.flashDither('flash', 400); st.ring(this.you); } else { st.shake(0.05); st.paletteFlash('sang', 2500); }
+        await st.wait(1600);
+        this.onGameOver?.(ev, snap);
         break;
+      }
+
+      default: this.sync(snap); // cartes spéciales (désactivées pour l'instant)
     }
   }
 
   async sweep() {
-    const st = this.stage;
-    const ms = [...st.cards.values()];
+    const st = this.stage, ms = [...st.cards.values()];
     if (!ms.length) return;
     sound.play('reshuffle');
     await Promise.all(ms.map((m, i) => st.wait(i * 25).then(() => st.moveCard(m, st.fossePos.clone().setY(st.fossePos.y + 0.04), m.quaternion.clone(), 300, { arc: 0.08 }))));
     for (const [id, m] of st.cards) { st.scene.remove(m); st.cards.delete(id); }
   }
-  async tapTable() {
-    const st = this.stage, R = st.R;
-    st.handBusy = true;
-    const p = st.poseR.pos.clone();
-    await st.moveHand(R, { pos: p.clone().setY(p.y + 0.05), rot: st.poseR.rot, curl: 0.9 }, 160);
-    await st.moveHand(R, { pos: p, rot: st.poseR.rot, curl: 0.9 }, 90);
-    st.shake(0.008);
-    await st.moveHand(R, st.poseR, 260);
-    st.handBusy = false;
-  }
-  banner(text) {
-    const b = $('#banner');
-    b.innerHTML = `<span>${esc(text)}</span>`;
-    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
-  }
 
-  // ── décisions du joueur local ─────────────────────────────
+  // ── décisions du joueur ────────────────────────────────────
   askDecision() {
-    const r = bustRisk(this.snap, this.you);
-    sound.setTension(r * 1.6);
+    sound.setTension(bustRisk(this.snap, this.you) * 1.6);
     this.hit.disabled = false; this.stay.disabled = false;
     $('#bar').classList.add('ready');
     this.stage.tapping = true;
@@ -380,100 +239,114 @@ export class Play {
   }
   decide(v) {
     if (!this.pending) return;
-    sound.play('click');
-    sound.setTension(0);
+    const b = v === 'hit' ? this.hit : this.stay; b.classList.remove('press'); void b.offsetWidth; b.classList.add('press'); setTimeout(() => b.classList.remove('press'), 320);
+    sound.play('click'); sound.setTension(0);
     this.hit.disabled = true; this.stay.disabled = true;
     $('#bar').classList.remove('ready');
     this.stage.tapping = false;
     const r = this.pending; this.pending = null; r(v);
   }
-
-  askTarget(kind, cands) {
-    const label = { freeze: ['Givre', 'Désigne l\'âme à figer — toi compris.'], three: ['Trois Glas', 'Pour qui sonnera le glas ?'], give: ['Sursis', 'À qui offrir ton second Sursis ?'] }[kind] || ['Choisis', ''];
-    this.say(label[0], [label[1]], 60000);
-    for (const pid of cands) $(`#party [data-pid="${pid}"]`)?.classList.add('target');
-    this.root.classList.add('targeting');
-    return new Promise((res) => { this.pendingTarget = { res, cands }; });
-  }
-  pickTarget(pid) {
-    const p = this.pendingTarget;
-    if (!p || !p.cands.includes(pid)) return;
-    sound.play('click');
-    this.pendingTarget = null;
-    document.querySelectorAll('#party .target').forEach((e) => e.classList.remove('target'));
-    this.root.classList.remove('targeting');
-    this.stage.setHover(null);
-    $('#say').classList.remove('show');
-    p.res(pid);
-  }
-  ndc(e) { const r = this.canvas.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1]; }
-  onMove(e) {
-    const [x, y] = this.ndc(e);
-    this.stage.mouse.x += (x - this.stage.mouse.x) * 0.5; this.stage.mouse.y += (y - this.stage.mouse.y) * 0.5;
-    if (this.pendingTarget) {
-      const pid = this.stage.pickAt(x, y);
-      const ok = pid && this.pendingTarget.cands.includes(pid);
-      this.stage.setHover(ok ? pid : null);
-      this.canvas.style.cursor = ok ? 'pointer' : '';
-    }
-  }
-  onClick(e) {
-    if (!this.pendingTarget) { const [x, y] = this.ndc(e); const c = this.stage.cardAt(x, y); if (c) this.onInspect?.(c); return; }
-    const [x, y] = this.ndc(e);
-    const pid = this.stage.pickAt(x, y);
-    if (pid) this.pickTarget(pid);
-  }
+  askTarget(kind, cands) { return Promise.resolve(cands[0]); }
   cancelPrompts() {
     if (this.pending) this.decide('stay');
-    if (this.pendingTarget) this.pickTarget(this.pendingTarget.cands[0]);
     if (this._continue) this._continue();
   }
 
-  // ── tableaux ───────────────────────────────────────────────
-  closeOverlay() { const o = $('#g-overlay'); o.className = 'hidden'; o.innerHTML = ''; this._continue = null; }
-  rows(snap, results) {
-    return [...snap.players].sort((a, b) => b.score - a.score).map((p) => {
-      const r = results?.find((x) => x.pid === p.id);
-      const before = p.score - (r?.pts || 0);
-      return `<li class="${this.is(p.id) ? 'me' : ''}">
-        <img alt="" src="${this.portraitOf(p, 40, 46)}">
-        <span class="r-name">${esc(this.is(p.id) ? 'Toi' : (BESTIAIRE[p.persona]?.name || p.name))}</span>
-        <span class="gauge big"><i class="g1" style="width:${(before / this.T()) * 100}%"></i><i class="g2" data-w="${Math.min(100 - (before / this.T()) * 100, ((r?.pts || 0) / this.T()) * 100)}" style="left:${(before / this.T()) * 100}%;width:0"></i></span>
-        <span class="r-pts">${r ? (r.status === 'bust' ? icon('skull') : r.flip7 ? icon('seal') + '+' + r.pts : '+' + r.pts) : ''}</span>
-        <b class="r-tot">${p.score}</b></li>`;
-    }).join('');
-  }
-  showRoundEnd(ev, snap, { gate = true } = {}) {
-    const o = $('#g-overlay');
-    o.className = 'page-overlay';
-    o.innerHTML = `<div class="sheet velin frame">
-      <header class="sheet-h"><span class="orn">${icon('skull')}</span><h2>Le Décompte</h2><span class="orn">${icon('skull')}</span></header>
-      <p class="sub">Fin de la manche ${roman(snap.round)}</p>
-      <ol class="rows">${this.rows(snap, ev.results)}</ol>
-      <button class="btn" data-go ${gate ? '' : 'disabled'}>${gate ? 'Manche suivante' : 'L\'hôte décide…'}</button></div>`;
-    requestAnimationFrame(() => setTimeout(() => o.querySelectorAll('.g2[data-w]').forEach((i) => { i.style.width = i.dataset.w + '%'; }), 80));
-    sound.play('stay');
+  // ── le décompte de fin de manche ───────────────────────────
+  // rayons tournants derrière, titre lettre à lettre, chaque carte rejouée
+  // sur la plaque de son joueur, total qui grimpe, sceau « Profané » qui s'abat
+  closeOverlay() { const o = $('#g-overlay'); o.className = 'hidden'; o.innerHTML = ''; this._continue = null; cancelAnimationFrame(this._raysF); }
+  showRoundEnd(ev, snap) {
+    const o = $('#g-overlay'), T = this.T();
+    const order = [snap.players.find((p) => this.is(p.id)), ...snap.players.filter((p) => !this.is(p.id))];
+    const lead = Math.max(...snap.players.map((p) => p.score));
+    o.className = 'tally-on';
+    const title = 'Le Décompte'.split('').map((ch, i) => (ch === ' ' ? ' ' : `<i style="animation-delay:${(0.15 + i * 0.05).toFixed(2)}s">${ch}</i>`)).join('');
+    o.innerHTML = `<canvas class="tl-rays"></canvas><div class="tally"><h2 class="tl-title">${title}</h2><br><p class="tl-sub">Manche ${snap.round} · premier à ${T}</p>
+      ${order.map((p, k) => {
+        const r = ev.results.find((x) => x.pid === p.id) || { pts: 0 }, before = p.score - r.pts;
+        return `<div class="tl-row" data-pid="${p.id}" style="--d:${(0.7 + k * 0.25).toFixed(2)}s">
+          <span class="tl-face"><img alt="" src="${this.face(p)}"></span>
+          <b class="tl-name">${esc(this.who(p.id))}</b>
+          <b class="tl-pts">${r.status === 'bust' ? '' : '+0'}</b>
+          <span class="tl-cards">${p.nums.map((c) => `<i class="chip${c.dup ? ' dup' : ''}">${c.v}</i>`).join('')}</span>
+          <div class="tl-foot"><span class="gauge"><i class="g1" style="width:${pct(before, T)}%"></i><i class="g2" style="left:${pct(before, T)}%"></i></span>
+            <span class="tl-tot"><b>${before}</b> / ${T}</span></div>
+        </div>`;
+      }).join('')}
+      <button class="dbtn warm" data-go><span>Manche suivante</span></button></div>`;
+    this.rays(o.querySelector('.tl-rays'));
+    sound.play('toll');
+    // la mise en scène, joueur après joueur
+    let alive = true;
+    const W = (ms) => new Promise((r) => setTimeout(r, ms));
+    const count = (el, from, to, dur) => new Promise((res) => { const t0 = performance.now(); const step = (now) => { if (!alive) return res(); const k = Math.min(1, (now - t0) / dur); el.textContent = Math.round(from + (to - from) * k); if (k < 1) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+    const bump = (el) => { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); };
+    const fly = (from, txt) => { const r = from.getBoundingClientRect(), f = document.createElement('b'); f.className = 'fly-num'; f.textContent = txt; f.style.left = r.left + r.width / 2 + 'px'; f.style.top = r.top + 'px'; document.body.appendChild(f); setTimeout(() => f.remove(), 800); };
+    const show = async () => {
+      await W(1100);
+      for (const p of order) {
+        if (!alive) return;
+        const row = o.querySelector(`.tl-row[data-pid="${p.id}"]`), r = ev.results.find((x) => x.pid === p.id) || { pts: 0 }, bust = r.status === 'bust', before = p.score - r.pts;
+        const pts = row.querySelector('.tl-pts'), chips = [...row.querySelectorAll('.chip')];
+        let run = 0;
+        for (const ch of chips) {
+          if (!alive) return;
+          ch.classList.add('go'); sound.play('flip');
+          await W(230);
+          if (!bust && !ch.classList.contains('dup')) { run += +ch.textContent; pts.textContent = '+' + run; bump(pts); fly(ch, '+' + ch.textContent); }
+        }
+        if (bust) {
+          await W(250);
+          const st = document.createElement('em'); st.className = 'tl-stamp'; st.textContent = 'Profané'; row.appendChild(st);
+          sound.play('bust'); this.stage.shake(0.03);
+          const box = o.querySelector('.tally'); box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
+          await W(700);
+          continue;
+        }
+        if (r.flip7) { const se = document.createElement('em'); se.className = 'tl-seal'; se.innerHTML = 'Sept<br>sceaux'; row.appendChild(se); sound.play('flip7'); await W(500); }
+        if (r.pts !== run) { pts.textContent = '+' + r.pts; bump(pts); }
+        await W(200);
+        // la mise rejoint le total
+        const tot = row.querySelector('.tl-tot b'), g2 = row.querySelector('.g2');
+        g2.style.width = Math.min(100 - pct(before, T), pct(r.pts, T)) + '%';
+        if (r.pts) sound.play('gain');
+        await count(tot, before, p.score, 500 + Math.min(700, r.pts * 14));
+        bump(tot);
+        await W(300);
+      }
+      if (!alive) return;
+      // couronne au meneur
+      const best = order.filter((p) => p.score === lead && lead > 0);
+      if (best.length === 1) { const row = o.querySelector(`.tl-row[data-pid="${best[0].id}"]`); row.classList.add('win'); row.insertAdjacentHTML('beforeend', `<span class="tl-crown">${icon('crown')}</span>`); sound.play('stay'); }
+      o.querySelector('[data-go]').classList.add('go');
+    };
     return new Promise((res) => {
-      const done = () => { clearTimeout(tm); this._continue = null; if (gate) this.closeOverlay(); res(); };
-      const tm = setTimeout(done, gate ? 14000 : 2500);
-      if (gate) { o.querySelector('[data-go]').onclick = () => { sound.play('click'); done(); }; this._continue = done; }
+      const done = () => { alive = false; clearTimeout(tm); this._continue = null; this.closeOverlay(); res(); };
+      const tm = setTimeout(done, 25000);
+      o.querySelector('[data-go]').onclick = () => { sound.play('click'); done(); };
+      this._continue = done;
+      show();
     });
   }
-  showGameOver(ev, snap) {
-    const won = ev.winner === this.you;
-    const w = snap.players.find((p) => p.id === ev.winner);
-    sound.play(won ? 'win' : 'lose');
-    if (won) { this.stage.flashDither('flash', 400); this.stage.ring(this.you); } else { this.stage.shake(0.05); this.stage.paletteFlash('sang', 2500); }
-    const o = $('#g-overlay');
-    o.className = 'page-overlay';
-    o.innerHTML = `<div class="sheet ${won ? 'velin' : 'fange'} frame">
-      <header class="sheet-h"><span class="orn">${icon(won ? 'seal' : 'skull')}</span><h2>${won ? 'La dalle se rouvre' : 'La Fange te garde'}</h2><span class="orn">${icon(won ? 'seal' : 'skull')}</span></header>
-      <p class="sub">${won ? 'Deux cents âmes. Le Fossoyeur s\'écarte.' : esc((BESTIAIRE[w?.persona]?.name || w?.name || 'Un autre')) + ' a racheté sa chair.'}</p>
-      <ol class="rows">${this.rows(snap, null)}</ol>
-      <div class="btns">${this.canReplay ? '<button class="btn" data-again>Rejouer</button>' : ''}<button class="btn ghost" data-menu>Retour au guide</button></div></div>`;
-    return new Promise((res) => {
-      o.querySelector('[data-again]')?.addEventListener('click', () => { sound.play('click'); res(); this.onEnd?.('again'); });
-      o.querySelector('[data-menu]').addEventListener('click', () => { sound.play('click'); res(); this.onEnd?.('menu'); });
-    });
+  /** rayons tramés qui tournent lentement (fond du décompte) */
+  rays(cv) {
+    const P = PALETTES[this.dr.paletteName] || PALETTES.velin, px = Math.max(3, Math.round(Math.min(innerWidth, innerHeight) / 200));
+    const W = (cv.width = Math.ceil(innerWidth / px)), H = (cv.height = Math.ceil(innerHeight / px)), ctx = cv.getContext('2d'), img = ctx.createImageData(W, H), buf = new Uint32Array(img.data.buffer);
+    const ang = new Float32Array(W * H), rad = new Float32Array(W * H), bay = new Uint8Array(W * H), m = Math.hypot(W / 2, H / 2);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x, dx = x - W / 2, dy = y - H * 0.42; ang[i] = Math.atan2(dy, dx); rad[i] = Math.hypot(dx, dy) / m; bay[i] = bayer(x, y); }
+    const C0 = abgr(P.ramp[0]), C1 = abgr(P.ramp[1]), C2 = abgr(P.ramp[2]);
+    const t0 = performance.now();
+    const step = (now) => {
+      if (!cv.isConnected) return;
+      const t = (now - t0) / 1000, grow = Math.min(1, t / 1.2);
+      for (let i = 0; i < buf.length; i++) {
+        const r = rad[i], ray = Math.sin(ang[i] * 9 + t * 0.25) * 0.5 + 0.5, v = ray * ray * (1.1 - r) * grow, b = bay[i];
+        buf[i] = v * 70 > b + 2 ? (v * 26 > b ? C2 : C1) : C0;
+      }
+      ctx.putImageData(img, 0, 0);
+      this._raysF = requestAnimationFrame(step);
+    };
+    this._raysF = requestAnimationFrame(step);
   }
 }
