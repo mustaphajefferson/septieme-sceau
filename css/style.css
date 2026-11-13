@@ -200,21 +200,21 @@ body.veiled #app, body.veiled #app * { pointer-events: none !important; }
   border: calc(var(--u) * 2) solid transparent; border-image: var(--bd-card) calc(var(--u) * 2) / calc(var(--u) * 2) / 0 repeat; background: var(--c4) padding-box; image-rendering: pixelated;
   filter: drop-shadow(var(--u) var(--u) 0 #000); animation: deal .42s steps(6) both; }
 .chip.mod { border-image-source: var(--bd-card-w); background-color: var(--w3); color: #000; width: auto; min-width: calc(var(--u) * 11); padding: 0 3px 2px; }
-.chip.act { background-color: var(--c3); color: var(--c0); width: auto; padding: 0 3px 2px; font-size: 16px; }
+.chip.bon { background-color: var(--c3); color: var(--c0); width: auto; padding: 0 3px 2px; font-size: 16px; }
 .pf.frozen { filter: saturate(.4) brightness(1.15); }
 .pf.frozen .pf-tag { background: var(--c4); color: var(--c0); }
 #party.many { width: min(250px, 42vw); gap: calc(var(--u) * 2); }
 #party.lots { grid-template-columns: 1fr 1fr; width: min(470px, 62vw); }
 #party.many .pf-face { display: none; } #party.many .pf-id, #party.many .pf .gauge { grid-column: 1 / 3; }
 #party.many .pf-name { font-size: 16px; } #party.many .pf-score { font-size: 24px; grid-row: 1; } #party.many .pf-score small { display: inline; margin-left: 3px; }
-#party.many .pf-cards { min-height: calc(var(--u) * 9); margin-top: 2px; padding-top: 2px; } #party.many .chip { height: calc(var(--u) * 9); width: calc(var(--u) * 8); font-size: 14px; } #party.many .chip.mod, #party.many .chip.act { width: auto; }
+#party.many .pf-cards { min-height: calc(var(--u) * 9); margin-top: 2px; padding-top: 2px; } #party.many .chip { height: calc(var(--u) * 9); width: calc(var(--u) * 8); font-size: 14px; } #party.many .chip.mod, #party.many .chip.bon { width: auto; }
 #party.many .pf-sum { font-size: 16px; } #party.many .pf-tag { font-size: 11px; }
 .pick { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; background: var(--p50k), rgba(0, 0, 0, .35); image-rendering: pixelated; animation: fadein .2s steps(3) both; }
 .pickbox { width: min(420px, 92vw); padding: calc(var(--u) * 2) calc(var(--u) * 5) calc(var(--u) * 5); animation: drop .35s steps(5) both; }
 #g-overlay.many .tl-row { margin-top: calc(var(--u) * 2); padding: 0 calc(var(--u) * 3) calc(var(--u) * 1); }
 #g-overlay.many .tl-face { width: calc(var(--u) * 14); height: calc(var(--u) * 16); }
 #g-overlay.many .tl-title { font-size: clamp(40px, 6vw, 70px); } #g-overlay.many .tl-name { font-size: 20px; } #g-overlay.many .tl-pts, #g-overlay.many .tl-tot b { font-size: 28px; }
-#g-overlay.many .tl-cards .chip { width: calc(var(--u) * 9); height: calc(var(--u) * 11); font-size: 17px; } #g-overlay.many .tl-cards .chip.mod, #g-overlay.many .tl-cards .chip.act { width: auto; }
+#g-overlay.many .tl-cards .chip { width: calc(var(--u) * 9); height: calc(var(--u) * 11); font-size: 17px; } #g-overlay.many .tl-cards .chip.mod, #g-overlay.many .tl-cards .chip.bon { width: auto; }
 #g-overlay.many .tally { max-height: 100vh; overflow: auto; }
 .pf .chip { width: calc(var(--u) * 9); height: calc(var(--u) * 12); font-size: 19px; }
 .chip.dup { border-image-source: var(--bd-card-w); background-color: var(--w2); color: #000; animation: deal .42s steps(6) both, quake .3s steps(3) .42s 3; }
@@ -408,4 +408,15 @@ body.veiled #app, body.veiled #app * { pointer-events: none !important; }
   .tl-face { width: calc(var(--u) * 18); height: calc(var(--u) * 21); }
   .tl-name { font-size: 20px; } .tl-pts { font-size: 30px; } .tl-tot b { font-size: 30px; } .tl-stamp { right: 4%; }
   #dt-lead { font-size: 18px; }
+}
+/* cartes bonus dans les listes : étiquette courte, largeur libre */
+.pf .chip.bon, .pf .chip.mod, .tl-cards .chip.bon, .tl-cards .chip.mod, #party.many .chip.bon, #party.many .chip.mod { width: auto; min-width: calc(var(--u) * 9); padding: 0 4px 2px; flex: 0 0 auto; }
+.pf .chip.bon { font-size: 14px; letter-spacing: 0; }
+@media (max-width: 760px) {
+  #party.many { grid-template-columns: 1fr 1fr; gap: 4px; }
+  #party.many .pf { padding: 0 calc(var(--u) * 1.5) calc(var(--u) * 1) calc(var(--u) * 1.5); border-width: calc(var(--u) * 3); grid-template-columns: 1fr auto; gap: 0 4px; }
+  #party.many .pf-id { grid-row: 1; grid-column: 1; } #party.many .pf-score { grid-row: 1; grid-column: 2; font-size: 18px; } #party.many .pf-score small { font-size: 10px; }
+  #party.many .pf .gauge { display: none; } #party.many .pf-name { font-size: 13px; }
+  #party.many .pf-cards { min-height: 0; margin-top: 1px; padding-top: 1px; gap: 2px; border-top: 0; }
+  #party.many .pf-none { font-size: 11px; } #party.many .chip { height: 16px; width: 13px; font-size: 11px; border-width: 2px; } #party.many .pf-sum { font-size: 13px; }
 }

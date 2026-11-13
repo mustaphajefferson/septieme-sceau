@@ -99,7 +99,7 @@ export function makeGauntlet(side = 1) {
   const sleeve = new THREE.Group(); sleeve.visible = false; arm.add(sleeve);
   const slv = cyl(0.05, 0.11, 0.36, M.clothDark, 10); slv.rotation.x = Math.PI / 2; at(slv, 0, 0.0, 0.2); sleeve.add(slv);
   const brac = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.01, 4, 12), M.bronze); at(brac, 0, 0, 0.04); sleeve.add(brac);
-  root.userData.armParts = [va, cuff, spike, ...arm.children.filter((o) => o.geometry?.type === 'TorusGeometry')]; root.userData.bones = bones; root.userData.sleeve = sleeve;
+  const armParts = [va, cuff, spike, ...arm.children.filter((o) => o.geometry?.type === 'TorusGeometry')];
 
   const hand = new THREE.Group(); root.add(hand);
   hand.add(at(box(0.095, 0.03, 0.1, M.metal), 0, 0, -0.05));
@@ -126,7 +126,7 @@ export function makeGauntlet(side = 1) {
   tp2.add(at(box(0.018, 0.018, 0.03, M.metalDark), 0, 0, -0.015));
 
   root.userData = {
-    hand, fingers, thumb: [tp, tp2], curl: 0.2, side,
+    hand, fingers, thumb: [tp, tp2], curl: 0.2, side, armParts, bones, sleeve,
     setCurl(c) {
       this.curl = c;
       for (const ch of fingers) ch.forEach((p, i) => { p.rotation.x = -c * (i === 0 ? 0.9 : 1.15); });

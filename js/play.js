@@ -13,7 +13,7 @@ import { icon } from './icons.js';
 import { bayer, abgr } from './dots.js';
 import { keyLabel, cardKey } from './cardart.js';
 const chipOf = (c) => (c.t === 'n' ? String(c.v) : keyLabel(cardKey(c)));
-const chipCls = (c) => 'chip' + (c.dup ? ' dup' : '') + (c.t === 'm' || c.t === 'x' ? ' mod' : c.t === 'a' ? ' act' : '');
+const chipCls = (c) => 'chip' + (c.dup ? ' dup' : '') + (c.t === 'm' || c.t === 'x' ? ' mod' : c.t === 'a' ? ' bon' : '');
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
