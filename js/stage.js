@@ -72,10 +72,12 @@ export class Stage {
   setHands(kind = 'gant') {
     if (this.hands === kind) return; this.hands = kind;
     const bone = this._bone ||= new THREE.MeshStandardMaterial({ color: 0x9a907a, roughness: 0.9, flatShading: true });
+    const skin = this._skin ||= new THREE.MeshStandardMaterial({ color: 0x7a8a68, roughness: 0.85, flatShading: true });
     for (const g of [this.R, this.L]) {
-      g.traverse((o) => { if (!o.isMesh) return; o.userData.m0 ||= o.material; o.material = kind === 'os' ? bone : o.userData.m0; });
-      for (const m of g.userData.armParts || []) m.visible = kind !== 'os';
+      for (const m of g.userData.armParts || []) m.visible = kind === 'gant';
       if (g.userData.bones) g.userData.bones.visible = kind === 'os';
+      if (g.userData.sleeve) g.userData.sleeve.visible = kind === 'sorc';
+      g.traverse((o) => { if (!o.isMesh) return; o.userData.m0 ||= o.material; if (g.userData.sleeve && (o.parent === g.userData.sleeve)) return; o.material = kind === 'os' ? bone : kind === 'sorc' ? skin : o.userData.m0; });
     }
   }
   // ── sièges ─────────────────────────────────────────────────
@@ -87,26 +89,41 @@ export class Stage {
     this.you = you; this.lookBase.y = 0.98;
     const idx = players.findIndex((p) => p.id === you);
     const others = [...players.slice(idx + 1), ...players.slice(0, Math.max(idx, 0))];
+    // l'adversaire principal (« foe ») s'assoit en face, au milieu
+    const mi = others.findIndex((p) => p.id === 'foe');
+    if (mi >= 0 && others.length > 2) { const [f] = others.splice(mi, 1); others.splice(Math.floor(others.length / 2), 0, f); }
     const n = others.length;
+    // une créature immense (le Dragon) prend le centre, au fond ; les autres se répartissent autour
+    const crs = others.map((p) => { const kind = p.kind === 'ai' ? (PERSONA_CREATURE[p.persona] || p.persona) : 'pelerin'; return makeCreature(kind, 0); });
+    const bi = crs.findIndex((c) => c.root.userData.big), m = bi >= 0 ? n - 1 : n;
+    const sp0 = Math.min(this.camera.aspect < 1 ? 0.5 : 0.85, 0.42 * (Math.max(m, 2) - 1));
+    const angs = [];
+    if (bi < 0) for (let i = 0; i < m; i++) angs.push(m === 1 ? 0 : -sp0 + (2 * sp0 * i) / (m - 1));
+    else { // le centre reste libre pour la grande créature : les autres de part et d'autre
+      const L = Math.ceil(m / 2), Rn = m - L, side = (k, cnt) => (cnt === 1 ? 0.7 : 0.55 + (0.42 * k) / (cnt - 1));
+      for (let k = 0; k < L; k++) angs.push(-side(L - 1 - k, L));
+      for (let k = 0; k < Rn; k++) angs.push(side(k, Rn));
+    }
+    let ai = 0; const lk = n > 1 ? Math.max(0.3, 1.4 / n) : 1;   // plus il y a de monde, moins chaque siège est éclairé
     const spread = n === 1 ? 0 : Math.min(this.camera.aspect < 1 ? 0.5 : 0.78, 0.42 * (n - 1));
     let pil = 0;
     others.forEach((p, i) => {
-      const a = n === 1 ? 0 : -spread + (2 * spread * i) / (n - 1);
+      const cr = crs[i], kind = p.kind === 'ai' ? (PERSONA_CREATURE[p.persona] || p.persona) : 'pelerin';
+      const a = i === bi ? 0 : angs[ai++] ?? 0;
       const d = V3(Math.sin(a), 0, -Math.cos(a));
-      const kind = p.kind === 'ai' ? (PERSONA_CREATURE[p.persona] || p.persona) : 'pelerin';
-      const cr = makeCreature(kind, kind === 'pelerin' ? pil++ : 0);
-      const sp = TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r + 0.32)); sp.y = 0;
-      cr.root.position.copy(sp); cr.root.scale.setScalar(1.12);
+      const big = cr.root.userData.big;
+      const sp = TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r + (big ? 0.85 : 0.32))); sp.y = 0;
+      cr.root.position.copy(sp); cr.root.scale.setScalar(big ? 1.1 : 1.12);
       cr.root.lookAt(V3(TABLE.c.x, 0, TABLE.c.z)); cr.root.rotateY(Math.PI);
       cr.root.traverse((o) => { o.userData.pid = p.id; });
       this.scene.add(cr.root);
-            const fl = new THREE.PointLight(0xe8e8d0, 6, 3.2, 1.0);
+            const fl = new THREE.PointLight(0xe8e8d0, 6 * lk, 3.2, 1.0);
       fl.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.2))); fl.position.y = 1.35;
       this.scene.add(fl); cr.root.userData.fill = fl;
-      const face = new THREE.SpotLight(0xfff0d8, 14, 5, 0.5, 0.5, 1.0);
+      const face = new THREE.SpotLight(0xfff0d8, 14 * lk, 5, 0.5, 0.5, 1.0);
       face.position.copy(TABLE.c.clone().add(d.clone().multiplyScalar(TABLE.r - 0.6))); face.position.y = 1.15;
       face.target.position.copy(sp).setY(1.6); this.scene.add(face, face.target); fl.userData.face = face;
-      const rimL = new THREE.SpotLight(0xd8e8c0, 34, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;
+      const rimL = new THREE.SpotLight(0xd8e8c0, 34 * lk, 5, 0.6, 0.6, 1.0); rimL.position.copy(sp.clone().add(d.clone().multiplyScalar(1.4))); rimL.position.y = 3.2;
       rimL.target.position.copy(sp).setY(1.3); this.scene.add(rimL, rimL.target); face.userData.rim = rimL;
       this.seats.set(p.id, { pid: p.id, a, d, creature: cr, base: sp.clone(), kind });
     });

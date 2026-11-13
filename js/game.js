@@ -32,11 +32,11 @@ export function buildDeck(extra = [], { specials = true } = {}) {
   const id = () => 'c' + (i++);
   deck.push({ id: id(), t: 'n', v: 0 });
   for (let v = 1; v <= 12; v++) for (let k = 0; k < v; k++) deck.push({ id: id(), t: 'n', v });
-  if (specials) {
-    for (const a of ['freeze', 'three', 'chance']) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
-    for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
-    deck.push({ id: id(), t: 'x', v: 2 });
-  }
+  // specials : true (toutes), false, ou une liste parmi 'mods', 'x2', 'freeze', 'chance', 'three'
+  const has = (k) => specials === true || (Array.isArray(specials) && specials.includes(k));
+  for (const a of ['freeze', 'three', 'chance']) if (has(a)) for (let k = 0; k < 3; k++) deck.push({ id: id(), t: 'a', a });
+  if (has('mods')) for (const v of [2, 4, 6, 8, 10]) deck.push({ id: id(), t: 'm', v });
+  if (has('x2')) deck.push({ id: id(), t: 'x', v: 2 });
   extra.forEach((c, k) => deck.push({ relic: true, owner: 'me', ...c, id: 'r' + k }));
   return deck; // 94 + reliques
 }
@@ -88,7 +88,7 @@ export function bustRisk(state, pid) {
 // Composition restante de l'Ossuaire (si on ne voit que la défausse + les mains)
 export function remainingCounts(state) {
   const counts = {};
-  const full = buildDeck(state.extra || [], { specials: state.specials !== false });
+  const full = buildDeck(state.extra || [], { specials: state.specials ?? true });
   for (const c of full) counts[key(c)] = (counts[key(c)] || 0) + 1;
   const seen = [...(state.discard || [])];
   for (const p of state.players) seen.push(...p.nums, ...p.mods, ...(p.chance ? [p.chance] : []), ...(p.used || []));

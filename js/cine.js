@@ -99,7 +99,7 @@ export class Cine {
     const { l, p } = this.typing; p.textContent = l.t;
     if (l.chips) {
       const row = document.createElement('div'); row.className = 'ci-chips'; p.appendChild(row);
-      l.chips.forEach((v, k) => setTimeout(() => { const ch = document.createElement('i'); ch.className = 'chip' + (String(v).endsWith('!') ? ' dup' : ''); ch.textContent = String(v).replace('!', ''); row.appendChild(ch); sound.play('flip'); }, 180 * k));
+      l.chips.forEach((v, k) => setTimeout(() => { const ch = document.createElement('i'); ch.className = 'chip' + (String(v).endsWith('!') ? ' dup' : /^[+×]/.test(String(v)) ? ' mod' : /^[A-Za-zé]/.test(String(v)) ? ' act' : ''); ch.textContent = String(v).replace('!', ''); row.appendChild(ch); sound.play('flip'); }, 180 * k));
       const after = 180 * l.chips.length + 120;
       if (l.sum) setTimeout(() => { const b = document.createElement('b'); b.className = 'ci-sum'; b.textContent = l.sum; row.appendChild(b); sound.play('gain'); }, after);
       if (l.stamp) setTimeout(() => { const b = document.createElement('em'); b.className = 'ci-stamp'; b.textContent = l.stamp; row.appendChild(b); sound.play('bust'); this.shake = 0.3; }, after);

@@ -598,7 +598,8 @@ function frame(c, v, title = NAMES[v]) {
 }
 // l'onglet du rang : toujours au-dessus de tout, pour rester lisible
 function tab(c, v) {
-  const tw = v > 9 ? 50 : 38;
+  if (!isNum(v)) { if (v[0] !== 'm' && v !== 'x2') return; v = keyLabel(v); }
+  const tw = String(v).length > 1 ? 14 + String(v).length * 18 : 38;
   c.fillStyle = P; c.fillRect(WX - 2, WY - 2, tw, 44); box(c, WX - 2, WY - 2, tw, 44, 2);
   c.fillStyle = K; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.font = '700 38px Grenze'; c.fillText(String(v), WX - 2 + tw / 2, WY + 31);
 }
@@ -618,29 +619,39 @@ function encode(cv) {
 }
 function ctxOf(cv) { const c = cv.getContext('2d', { willReadFrequently: true }); c.lineJoin = c.lineCap = 'round'; return c; }
 
+/** Clé d'une carte : rang 0–12, ou 'freeze' / 'three' / 'chance' / 'm2'…'m10' / 'x2'. */
+export const cardKey = (c) => (c == null ? 0 : typeof c !== 'object' ? c : c.t === 'n' ? c.v : c.t === 'a' ? c.a : c.t === 'm' ? 'm' + c.v : 'x2');
+export const isNum = (k) => typeof k === 'number';
+/** libellé court (onglet, table) */
+export const keyLabel = (k) => (isNum(k) ? String(k) : k[0] === 'm' ? '+' + k.slice(1) : k === 'x2' ? '×2' : { freeze: 'Gel', three: 'Trois', chance: 'Sursis' }[k]);
 const faces = new Map();
 const hexABGR0 = (h) => { const n = parseInt(h.slice(1), 16); return (0xff000000 | ((n & 255) << 16) | (n & 0xff00) | (n >> 16)) >>> 0; };
 /** Les decks : noms, encres et gravures. Le 0 est celui du chevalier ; d'autres s'inscrivent avec registerDeck. */
 export const DECKS = [];
-export function registerDeck(i, d) { DECKS[i] = { ...d, lut: d.colors.map(hexABGR0) }; }
+export function registerDeck(i, d) { DECKS[i] = { ...(DECKS[i] || {}), ...d, lut: d.colors.map(hexABGR0) }; }
 /** Carte complète (v = rang 0–12 ; plain = sans gravure, pour les rangs pas encore gagnés ; deck = numéro du deck). */
 export function cardFace(v, plain = false, deck = 0) {
   const D = DECKS[deck] || DECKS[0], key = deck + ':' + v + (plain ? 'p' : '');
   if (faces.has(key)) return faces.get(key);
-  const layers = [], r = rng(v * 7919 + 13);
-  const art = (z, fn) => { const cv = mk(WW + 2 * B, WH + 2 * B), c = ctxOf(cv); c.translate(B, B); fn(c); layers.push({ z, x: WX - B, y: WY - B, w: cv.width, h: cv.height, clip: true, d: encode(cv) }); };
+  const wx = D.win?.x ?? WX, wy = D.win?.y ?? WY, fr = D.frame || frame, tb = D.tab || tab;
+  const seed = isNum(v) ? v : [...String(v)].reduce((a, ch) => a + ch.charCodeAt(0), 40);
+  const layers = [], r = rng(seed * 7919 + 13 + deck * 101);
+  const art = (z, fn) => { const cv = mk(WW + 2 * B, WH + 2 * B), c = ctxOf(cv); c.translate(B, B); fn(c); layers.push({ z, x: wx - B, y: wy - B, w: cv.width, h: cv.height, clip: true, cx: wx, cy: wy, d: encode(cv) }); };
   const full = (z, fn) => { const cv = mk(CW, CH), c = ctxOf(cv); fn(c); layers.push({ z, x: 0, y: 0, w: CW, h: CH, clip: false, d: encode(cv) }); };
   let pop = null;
   if (plain) {
     art(-0.6, (c) => { c.fillStyle = K; c.fillRect(-B, -B, WW + 2 * B, WH + 2 * B); halo(c, 96, 120, 10, 150, 215, 0); burst(c, 96, 120, 84, 200, 24, P, 0, 0.1); });
     art(0.5, (c) => { c.font = `700 ${v > 9 ? 150 : 190}px Grenze`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineWidth = 10; c.strokeStyle = P; c.strokeText(String(v), 96, 126); c.fillStyle = K; c.fillText(String(v), 96, 126); });
-    full(0, (c) => frame(c, v, 'À gagner'));
+    full(0, (c) => fr(c, v, 'À gagner'));
   } else {
-    D.art[v]({ bg: (f) => art(-1, f), far: (f) => art(-0.5, f), main: (f) => art(0.3, f), near: (f) => art(0.85, f), pop: (f) => { pop = f; } }, r);
-    full(0, (c) => frame(c, v, D.names[v]));
-    if (pop) full(1.3, (c) => { c.translate(WX, WY); pop(c); });
+    const L = { bg: (f) => art(-1, f), far: (f) => art(-0.5, f), main: (f) => art(0.3, f), near: (f) => art(0.85, f), pop: (f) => { pop = f; } };
+    if (isNum(v)) D.art[v](L, r);
+    else if (v[0] === 'm') D.sart.mod(L, r, +v.slice(1));
+    else D.sart[v](L, r);
+    full(0, (c) => fr(c, v, D.names[v] ?? (v[0] === 'm' ? D.names.mod + ' +' + v.slice(1) : '?')));
+    if (pop) full(1.3, (c) => { c.translate(wx, wy); pop(c); });
   }
-  full(0, (c) => tab(c, v));
+  full(0, (c) => tb(c, v));
   const face = { v, plain, layers, lut: D.lut, deck };
   faces.set(key, face);
   return face;
@@ -652,7 +663,8 @@ export function compose(face, out, tx = 0, ty = 0, depth = 7, hidden = null) {
   for (const L of face.layers) {
     if (hidden && L.id && hidden.has(L.id)) continue;
     const dx = Math.round(L.z * tx * depth), dy = Math.round(L.z * ty * depth);
-    const x0 = L.clip ? WX : Math.max(0, L.x + dx), x1 = L.clip ? WX + WW : Math.min(CW, L.x + dx + L.w), y0 = L.clip ? WY : Math.max(0, L.y + dy), y1 = L.clip ? WY + WH : Math.min(CH, L.y + dy + L.h);
+    const cx = L.cx ?? WX, cy = L.cy ?? WY;
+    const x0 = L.clip ? cx : Math.max(0, L.x + dx), x1 = L.clip ? cx + WW : Math.min(CW, L.x + dx + L.w), y0 = L.clip ? cy : Math.max(0, L.y + dy), y1 = L.clip ? cy + WH : Math.min(CH, L.y + dy + L.h);
     for (let y = y0; y < y1; y++) { const sy = y - L.y - dy; if (sy < 0 || sy >= L.h) continue; const ro = sy * L.w - L.x - dx, oo = y * CW; for (let x = x0; x < x1; x++) { const q = L.d[ro + x]; if (q) out[oo + x] = q; } }
   }
   return out;
@@ -672,10 +684,14 @@ export function cardCanvas(v, plain = false, deck = 0) { const k = deck + ':' + 
 export function tableCanvas(v, plain = false, deck = 0) {
   const D = DECKS[deck] || DECKS[0], cv = mk(CW, CH), c = ctxOf(cv), I = D.colors[1], Pp = D.colors[2];
   c.fillStyle = I; c.fillRect(0, 0, CW, CH);
-  if (!plain) c.drawImage(cardCanvas(v, false, deck), WX + 6, WY + 50, WW - 12, 150, 9, 178, CW - 18, 141);
+  const wx = D.win?.x ?? WX, wy = D.win?.y ?? WY;
+  if (!plain) c.drawImage(cardCanvas(v, false, deck), wx + 6, wy + 50, WW - 12, 150, 9, 178, CW - 18, 141);
   else { c.fillStyle = Pp; c.font = '700 34px Grenze'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('à gagner', CW / 2, 248); }
-  c.fillStyle = Pp; c.fillRect(7, 7, CW - 14, 164);
-  c.fillStyle = I; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `700 ${v > 9 ? 150 : 176}px Grenze`; c.fillText(String(v), CW / 2, 96);
+  const lab = keyLabel(v), act = !isNum(v);
+  c.fillStyle = act ? D.colors[v[0] === 'm' || v === 'x2' ? 4 : 3] : Pp; c.fillRect(7, 7, CW - 14, 164);
+  c.fillStyle = I; c.textAlign = 'center'; c.textBaseline = 'middle';
+  let fs = act ? 120 : lab.length > 1 ? 150 : 176; c.font = `700 ${fs}px Grenze`; while (c.measureText(lab).width > CW - 30) c.font = `700 ${(fs -= 6)}px Grenze`;
+  c.fillText(lab, CW / 2, 96);
   return cv;
 }
 /** Dos des cartes. */
@@ -689,7 +705,7 @@ export function backCanvas(deck = 0) {
   box(c, 5, 5, CW - 10, CH - 10, 3, P); box(c, 11, 11, CW - 22, CH - 22, 1, P);
   disc(c, CW / 2, CH / 2, 62, K, 3, P); disc(c, CW / 2, CH / 2, 54, null, 1, P);
   for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + (k * TAU) / 7; disc(c, CW / 2 + Math.cos(a) * 76, CH / 2 + Math.sin(a) * 76, 5, R, 1.5, P); }
-  if (deck === 1) { skull(c, CW / 2, CH / 2 + 2, 2.6); } else { c.fillStyle = P; c.font = '400 74px Jacquard'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('VII', CW / 2, CH / 2 + 4); }
+  if ((DECKS[deck] || DECKS[0]).backMark) (DECKS[deck] || DECKS[0]).backMark(c); else if (deck === 1) { skull(c, CW / 2, CH / 2 + 2, 2.6); } else { c.fillStyle = P; c.font = '400 74px Jacquard'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('VII', CW / 2, CH / 2 + 4); }
   for (const [x, y] of [[20, 20], [CW - 20, 20], [20, CH - 20], [CW - 20, CH - 20]]) shape(c, [[x, y - 6], [x + 6, y], [x, y + 6], [x - 6, y]], { smooth: false, fill: G, lw: 1, stroke: P });
   const out = paint(encode(cv), mk(CW, CH), (DECKS[deck] || DECKS[0]).lut); flat.set(fk, out); return out;
 }
@@ -699,8 +715,8 @@ export function clearCards() { faces.clear(); flat.clear(); }
 //  Les planches des cinématiques : même outillage, même fenêtre
 //  que les cartes (192 × 240 + débord), sans cartouche.
 // ═════════════════════════════════════════════════════════════
-registerDeck(0, { names: NAMES, colors: COLORS, art: ART });
-export const T = { K, rng, frameOf: frame, P, R, G, tone, WW, WH, B, TAU, spline, poly, pathOf, shape, line, seg, disc, box, inside, hatch, shade, rays, burst, halo, skyNight, skyDay, cloud, land, grass, tree, bramble, flame, candle, skull, raven, bat, bird, bell, moth, bricks, wing };
+registerDeck(0, { names: { ...NAMES, freeze: 'Le Givre', three: 'Le Tocsin', chance: 'Le Sursis', mod: 'Obole', x2: 'Le Double' }, colors: COLORS, art: ART, sart: {} });
+export const T = { K, rng, frameOf: frame, tabOf: tab, paper, CW, CH, WX, WY, encode, ctxOf, mk, P, R, G, tone, WW, WH, B, TAU, spline, poly, pathOf, shape, line, seg, disc, box, inside, hatch, shade, rays, burst, halo, skyNight, skyDay, cloud, land, grass, tree, bramble, flame, candle, skull, raven, bat, bird, bell, moth, bricks, wing };
 export const PLATE = { WX, WY, WW, WH };
 /** fn(L, r, T) avec L.bg/far/main/near/pop(fn) et L.extra(z, id, fn) pour un calque qu'on allume ou éteint pendant la planche */
 export function plateFace(fn, seed = 1) {

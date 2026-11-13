@@ -89,7 +89,7 @@ export const FOES2 = [
   { name: 'Le Moine sans visage', risk: 0.24, kit: { body: 'robe', head: 'exec', hands: 'bony' } },
   { name: 'Le Chantre des cryptes', risk: 0.3, kit: { body: 'robe', head: 'mitre', hands: 'bony', extras: ['crozier', 'skulls'] } },
   { name: 'Le Chevalier creux', risk: 0.4, kit: { head: 'helm', sword: 'bourreau', shield: 1 } },
-  { name: 'La Mort', risk: 0.34, boss: true, kit: { body: 'robe', head: 'death', hands: 'bony', extras: ['scythe'] } },
+  { name: "L'Ange du Jugement", risk: 0.34, boss: true, kit: { body: 'robe', head: 'angel', hands: 'bony', extras: ['wings'] } },
 ];
 export const LORE2 = [
   { say: { bust: 'Encore un peu…', win: 'Reste avec moi.', stay: 'Déjà ?', taunt: "Je ne me rappelle plus mon nom. Et toi ?" } },
@@ -103,11 +103,55 @@ export const LORE2 = [
   { say: { bust: '…', win: '…', stay: '…', taunt: '…' } },
   { say: { bust: 'Requiem.', win: 'Amen.', stay: 'Silence.', taunt: 'Je chante pour les morts. Tu es déjà dans le chœur.' } },
   { say: { bust: 'Vide, comme moi.', win: 'Rien dedans.', stay: 'Creux.', taunt: "Mon armure est vide. Ta main l'est-elle aussi ?" } },
-  { say: { bust: 'Tout finit ainsi.', win: "C'est l'heure.", stay: 'Tu repousses l\'inévitable.', taunt: 'Je tiens la banque depuis le premier jour.' } },
+  { say: { bust: 'Trop léger.', win: 'Jugé.', stay: 'Tu crains la balance ?', taunt: 'Je pèse chaque âme. Pose la tienne.' } },
 ];
 export const HERO2 = { body: 'robe', head: 'skull', hands: 'bony' };
 
+// ─────────────────────────────────────────────────────────────
+//  Parcours III — la Sorcière : marais, cimes gelées, antre du dragon.
+//  Ici, on joue à plusieurs autour de la table.
+// ─────────────────────────────────────────────────────────────
+export const ZONES3 = [
+  { id: 'marais', name: 'Le Marais des Feux-follets', place: 'marais' },
+  { id: 'cimes', name: 'Les Cimes gelées', place: 'cimes' },
+  { id: 'antre', name: "L'Antre du Dragon", place: 'antre' },
+];
+export const FOES3 = [
+  { name: 'Le Crapaud-Roi', risk: 0.3, kit: { body: 'bare', head: 'frog', hands: 'bony' } },
+  { name: "L'Homme-Saule", risk: 0.24, kit: { body: 'robe', head: 'willow', hands: 'bony' } },
+  { name: 'La Vieille aux Lanternes', risk: 0.33, kit: { body: 'robe', head: 'hag', hands: 'bony', extras: ['lantern'] } },
+  { name: 'Le Roi des Feux-follets', risk: 0.32, boss: true, kit: { body: 'robe', head: 'wisp', hands: 'bony', extras: ['lantern'] } },
+  { name: 'Le Yéti', risk: 0.36, kit: { body: 'bare', head: 'yeti', pauldrons: 'loup', hands: 'bony' } },
+  { name: 'Le Moine de givre', risk: 0.22, kit: { body: 'robe', head: 'exec', hands: 'bony', extras: ['crozier'] } },
+  { name: 'La Chasseresse', risk: 0.34, kit: { body: 'gambeson', head: 'wolf', shield: 1 } },
+  { name: 'Le Géant de givre', risk: 0.38, boss: true, kit: { head: 'helm', helm: 'piques', sword: 'bourreau', pauldrons: 'plates', scale: 1.18 } },
+  { name: 'Le Cultiste écarlate', risk: 0.28, kit: { body: 'robe', head: 'plague', hands: 'bony' } },
+  { name: "Le Chevalier d'or", risk: 0.33, kit: { breast: 'soleil', head: 'soleil' } },
+  { name: 'La Vouivre', risk: 0.31, kit: { body: 'robe', head: 'veil', hands: 'bony', extras: ['skulls'] } },
+  { name: 'Le Dragon', risk: 0.35, boss: true, kit: { dragon: true } },
+];
+export const LORE3 = [
+  { say: { bust: 'Croâ !', win: 'Mon royaume, ma mare.', stay: 'Peureux.', taunt: 'Un baiser porte bonheur. Approche.' } },
+  { say: { bust: 'Je plie…', win: 'Les racines gagnent toujours.', stay: 'Patience.', taunt: 'J\'ai le temps. Cent ans de temps.' } },
+  { say: { bust: 'Ma flamme vacille.', win: 'Suis la lumière, petite.', stay: 'Tu as vu clair.', taunt: 'Une lanterne par âme perdue. J\'en ai beaucoup.' } },
+  { say: { bust: 'Je m\'éteins !', win: 'Égarée, comme les autres.', stay: 'Tu ne me suis plus ?', taunt: 'Suis-moi… juste encore une carte…' } },
+  { say: { bust: 'GRAAH !', win: 'Hmpf.', stay: 'Hm ?', taunt: 'Le froid fait trembler les mains. Pas les miennes.' } },
+  { say: { bust: 'Silence glacé.', win: 'Ainsi soit-il.', stay: 'Sage.', taunt: 'Je joue pour réchauffer mon cloître.' } },
+  { say: { bust: 'Manqué.', win: 'Prise.', stay: 'Elle flaire le piège.', taunt: 'Je chasse les sorcières. Tu tombes bien.' } },
+  { say: { bust: 'Ma glace se fend !', win: 'Gelée pour l\'éternité.', stay: 'Tu as froid ?', taunt: 'Personne ne passe le col sans jouer contre moi.' } },
+  { say: { bust: 'Le Dragon me punira.', win: 'Pour Lui !', stay: 'Lâche.', taunt: 'Ton or ira au Maître.' } },
+  { say: { bust: 'Mon armure…', win: 'L\'or appelle l\'or.', stay: 'Prudente.', taunt: 'J\'ai vendu mon ordre pour une pièce du trésor.' } },
+  { say: { bust: 'Sss…', win: 'Sssublime.', stay: 'Ssserrée ?', taunt: 'Ma pierre vaut plus que ta vie.' } },
+  { say: { bust: 'GRRRAAAH !', win: 'Encore une pour le trésor.', stay: 'Tu flaires le feu.', taunt: 'Mille ans que je joue. Mille ans que je gagne.' } },
+];
+export const HERO3 = { body: 'robe', head: 'witch', hands: 'bony' };
+
+// règles par lieu : cartes bonus admises et taille de la table
+const R1 = () => ({ specials: false, size: 2 });
+const R2 = (z) => ({ specials: [['mods', 'x2'], ['mods', 'x2', 'freeze', 'chance'], true][z], size: 2 });
+const R3 = (z) => ({ specials: true, size: [3, 4, 5][z] });
 export const CAMPAIGNS = [
-  { id: 'chevalier', hero: 'Le Chevalier', heroKind: 'pelerin', hands: 'gant', persona: 'f', zones: ZONES, foes: FOES, deck: 0, deckName: 'Le deck du chevalier' },
-  { id: 'squelette', hero: 'Le Squelette', heroKind: 'h2', hands: 'os', persona: 's', zones: ZONES2, foes: FOES2, deck: 1, deckName: 'Le deck du squelette' },
+  { id: 'chevalier', hero: 'Le Chevalier', heroKind: 'pelerin', hands: 'gant', persona: 'f', zones: ZONES, foes: FOES, deck: 0, deckName: 'Le deck du chevalier', paliers: [30, 50, 100, 200], carry: true, rules: R1 },
+  { id: 'squelette', hero: 'Le Squelette', heroKind: 'h2', hands: 'os', persona: 's', zones: ZONES2, foes: FOES2, deck: 1, deckName: 'Le deck du squelette', paliers: [50, 100, 150, 200], carry: true, rules: R2 },
+  { id: 'sorciere', hero: 'La Sorcière', heroKind: 'h3', hands: 'sorc', persona: 'w', zones: ZONES3, foes: FOES3, deck: 2, deckName: 'Le grimoire de la Sorcière', paliers: [80, 120, 160, 200], carry: false, rules: R3 },
 ];

@@ -40,6 +40,7 @@
         <button id="m-go" class="dbtn big warm"><span>Continuer</span></button>
         <button id="m-deck" class="dbtn big"><span>Deck</span></button>
       </div>
+      <button id="m-free" class="dbtn warm hidden"><span>Table libre</span></button>
     </div>
   </section>
 
@@ -81,6 +82,24 @@
 
   <!-- ═══ LE BUTIN (la carte gagnée s'affiche par-dessus) ═══ -->
   <section id="spoils" class="screen"></section>
+
+  <!-- ═══ TABLE LIBRE : le Flip 7 complet ═══ -->
+  <section id="free" class="screen">
+    <div class="full" data-gl></div>
+    <div class="dpanel freebox">
+      <h2>Table libre</h2>
+      <p class="sub">Le Flip 7 complet : 94 cartes, premier à 200.</p>
+      <p class="fl-lab">Ton personnage (et son deck)</p><div class="fl-row" id="fl-hero"></div>
+      <p class="fl-lab">Adversaires</p><div class="fl-row" id="fl-n"></div>
+      <p class="fl-lab">Le lieu</p><div class="fl-row" id="fl-place"></div>
+      <div class="stack"><button class="dbtn warm" id="fl-go"><span>S'asseoir</span></button><button class="dbtn" data-back><span>Retour</span></button></div>
+    </div>
+  </section>
+  <section id="freeend" class="screen">
+    <div class="full" data-gl></div>
+    <div class="dpanel freebox"><h2 id="fe-title"></h2><div id="fe-rows"></div>
+      <div class="stack"><button class="dbtn warm" id="fe-again"><span>Rejouer</span></button><button class="dbtn" data-back><span>Retour</span></button></div></div>
+  </section>
 
   <!-- ═══ LA MORT ═══ -->
   <section id="death" class="screen">

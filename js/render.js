@@ -19,6 +19,10 @@ export const PALETTES = {
   cendre:  { ramp: ['#08070a', '#27222d', '#5e5668', '#a89eb4', '#ebe6ef'], warm: ['#12060a', '#5a1a2a', '#c23a50', '#f2a4ae'] },
   styx:    { ramp: ['#03070a', '#0b2530', '#1f5c66', '#72b6aa', '#dcf0e8'], warm: ['#0a0604', '#3d2c10', '#cfa444', '#f6de94'] },
   os:      { ramp: ['#0c0806', '#3b2519', '#7c5437', '#caad86', '#f3e7ce'], warm: ['#140404', '#6c0f10', '#cf2424', '#ff8e5e'] },
+  // parcours III — marais, givre, or du dragon
+  marais:  { ramp: ['#070806', '#1e2412', '#4d5a26', '#b5b85a', '#ece9c8'], warm: ['#0c0704', '#4a2a0a', '#d8a028', '#f8e080'] },
+  givre:   { ramp: ['#04060c', '#14223a', '#3c6488', '#a8c8dc', '#f0f6fa'], warm: ['#0a0406', '#3a1a2a', '#c84a6a', '#f8b0c0'] },
+  or:      { ramp: ['#0a0503', '#2a1206', '#6a3410', '#c88a34', '#f6e2b8'], warm: ['#140202', '#6a1006', '#e04018', '#ffb070'] },
   sang:    { ramp: ['#0a0303', '#3a0d0a', '#8a2416', '#d8613c', '#f2dcc0'], warm: ['#0a0303', '#8a2416', '#e2643a', '#f6c08a'] },
 };
 

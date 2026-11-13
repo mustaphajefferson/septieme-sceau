@@ -11,6 +11,9 @@ import { PALETTES } from './render.js';
 import { portraitCanvas } from './gallery.js';
 import { icon } from './icons.js';
 import { bayer, abgr } from './dots.js';
+import { keyLabel, cardKey } from './cardart.js';
+const chipOf = (c) => (c.t === 'n' ? String(c.v) : keyLabel(cardKey(c)));
+const chipCls = (c) => 'chip' + (c.dup ? ' dup' : '') + (c.t === 'm' || c.t === 'x' ? ' mod' : c.t === 'a' ? ' act' : '');
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -62,7 +65,7 @@ export class Play {
 
   // ── les deux joueurs, en haut à gauche ─────────────────────
   buildParty(snap) {
-    const box = $('#party'); box.innerHTML = '';
+    const box = $('#party'); box.innerHTML = ''; box.classList.toggle('many', snap.players.length > 2); box.classList.toggle('lots', snap.players.length > 5);
     for (const p of [snap.players.find((q) => this.is(q.id)), ...snap.players.filter((q) => !this.is(q.id))]) {
       const el = document.createElement('div');
       el.className = 'pf' + (this.is(p.id) ? ' me' : ''); el.dataset.pid = p.id;
@@ -93,14 +96,15 @@ export class Play {
       if (sc.firstElementChild.textContent !== String(p.score)) { sc.firstElementChild.textContent = p.score; sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }
       pf.querySelector('.g1').style.width = pct(p.score, T) + '%';
       const g2 = pf.querySelector('.g2'); g2.style.left = pct(p.score, T) + '%'; g2.style.width = Math.min(100 - pct(p.score, T), pct(hand, T)) + '%';
-      pf.querySelector('.pf-tag').textContent = bust ? 'profané' : p.flip7 ? 'sept sceaux' : p.status === 'stayed' ? 'retiré' : snap.turn === p.id ? (this.is(p.id) ? 'à toi' : 'joue…') : '';
-      // la liste des cartes : on n'ajoute que les nouvelles, pour qu'elles seules s'animent
-      const box = pf.querySelector('.pf-cards'), n = p.nums.length, first = p.nums[0]?.id ?? null;
-      if (first !== pf._first || n < (pf._n || 0)) box.innerHTML = '';
+      pf.classList.toggle('frozen', p.status === 'frozen');
+      pf.querySelector('.pf-tag').textContent = bust ? 'profané' : p.flip7 ? 'sept sceaux' : p.status === 'frozen' ? 'gelé' : p.status === 'stayed' ? 'retiré' : snap.turn === p.id ? (this.is(p.id) ? 'à toi' : 'joue…') : '';
+      // la liste des cartes (chiffres, puis bonus) : on n'ajoute que les nouvelles, pour qu'elles seules s'animent
+      const box = pf.querySelector('.pf-cards'), all = [...p.nums, ...p.mods, ...(p.chance ? [p.chance] : [])], n = all.length;
       box.querySelector('.pf-sum')?.remove(); box.querySelector('.pf-none')?.remove();
-      const chips = box.querySelectorAll('.chip');
-      p.nums.forEach((c, i) => { let ch = chips[i]; if (!ch) { ch = document.createElement('i'); ch.className = 'chip'; ch.textContent = c.v; box.appendChild(ch); } ch.classList.toggle('dup', !!c.dup); });
-      pf._first = first; pf._n = n;
+      let chips = [...box.querySelectorAll('.chip')];
+      if (chips.length > n || chips.some((ch, i) => ch.dataset.id !== all[i].id)) { box.innerHTML = ''; chips = []; }
+      all.forEach((c, i) => { let ch = chips[i]; if (!ch) { ch = document.createElement('i'); ch.dataset.id = c.id; ch.textContent = chipOf(c); box.appendChild(ch); } ch.className = chipCls(c); });
+      
       if (n) { const sm = document.createElement('b'); sm.className = 'pf-sum'; sm.textContent = '+' + p.hand; box.appendChild(sm); } else box.innerHTML = '<span class="pf-none">aucune carte</span>';
       if (this.is(p.id)) {
         const r = p.status === 'active' && p.nums.length ? bustRisk(snap, p.id) : 0;
@@ -194,6 +198,31 @@ export class Play {
 
       case 'discard': await st.settleCard(ev.card, 'fosse', snap); this.sync(snap); break;
 
+      // ── cartes bonus ──
+      case 'setAside': await st.settleCard(ev.card, ev.pid, snap); st.layout(snap); this.sync(snap); sound.play('gain'); break;
+      case 'give':
+        await st.settleCard(ev.card, ev.to, snap); st.layout(snap); this.sync(snap);
+        this.say('', [`${this.who(ev.from)} offre une seconde chance à ${this.who(ev.to).toLowerCase() === 'toi' ? 'toi' : this.who(ev.to)}`], 2000);
+        await st.wait(600); break;
+      case 'saved':
+        this.sync(snap);
+        sound.play('flip7'); st.flashDither('flash', 200); st.ring(ev.pid);
+        this.banner('Seconde chance', `${this.who(ev.pid)} évite la profanation`);
+        await Promise.all([st.settleCard(ev.card, 'fosse', snap), st.settleCard(ev.chance, 'fosse', snap)]);
+        st.layout(snap); await st.wait(900); break;
+      case 'freeze':
+        await st.settleCard(ev.card, 'fosse', snap); st.layout(snap); this.sync(snap);
+        sound.play('stay'); st.burst(ev.to, 'frost', 140); st.flashDither('flash', 120);
+        this.banner('Gel', ev.from === ev.to ? `${this.who(ev.to)} se fige et encaisse` : `${this.who(ev.from)} fige ${this.is(ev.to) ? 'ta main' : this.who(ev.to)}`);
+        await st.wait(1500); break;
+      case 'three':
+        await st.settleCard(ev.card, 'fosse', snap); this.sync(snap);
+        sound.play('toll'); st.shake(0.02);
+        this.banner('Trois cartes', `${this.is(ev.to) ? 'Tu dois' : this.who(ev.to) + ' doit'} en tirer trois`);
+        await st.wait(1400); break;
+      case 'toll': st.focus = ev.pid; this.say('', [`Carte ${ev.n} sur 3`], 900); sound.play('toll'); await st.wait(250); break;
+      case 'void': await st.settleCard(ev.card, 'fosse', snap); this.sync(snap); break;
+
       case 'reshuffle':
         sound.play('reshuffle');
         st.setDeckCount(snap.deckCount);
@@ -246,8 +275,20 @@ export class Play {
     this.stage.tapping = false;
     const r = this.pending; this.pending = null; r(v);
   }
-  askTarget(kind, cands) { return Promise.resolve(cands[0]); }
+  /** à qui donner la carte ? (Gel, Trois cartes, Seconde chance en trop) */
+  askTarget(kind, cands) {
+    const title = { freeze: 'Gel', three: 'Trois cartes', give: 'Seconde chance' }[kind] || 'Choisis';
+    const help = { freeze: 'Le joueur choisi encaisse sa main et sort de la manche.', three: 'Le joueur choisi doit tirer trois cartes d\'un coup.', give: 'Tu en as déjà une : offre-la.' }[kind] || '';
+    const box = document.createElement('div'); box.className = 'pick';
+    box.innerHTML = `<div class="dpanel pickbox"><h2>${title}</h2><p class="sub">${help}</p><div class="stack">${cands.map((id) => `<button class="dbtn${this.is(id) ? '' : ' warm'}" data-t="${id}"><span>${this.is(id) ? 'Moi' : esc(this.names[id])}</span></button>`).join('')}</div></div>`;
+    this.root.appendChild(box); sound.play('toll');
+    return new Promise((res) => {
+      this._pick = (id) => { box.remove(); this._pick = null; res(id); };
+      box.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) { sound.play('click'); this._pick(b.dataset.t); } });
+    });
+  }
   cancelPrompts() {
+    if (this._pick) this._pick(null);
     if (this.pending) this.decide('stay');
     if (this._continue) this._continue();
   }
@@ -260,7 +301,7 @@ export class Play {
     const o = $('#g-overlay'), T = this.T();
     const order = [snap.players.find((p) => this.is(p.id)), ...snap.players.filter((p) => !this.is(p.id))];
     const lead = Math.max(...snap.players.map((p) => p.score));
-    o.className = 'tally-on';
+    o.className = 'tally-on' + (snap.players.length > 2 ? ' many' : '');
     const title = 'Le Décompte'.split('').map((ch, i) => (ch === ' ' ? ' ' : `<i style="animation-delay:${(0.15 + i * 0.05).toFixed(2)}s">${ch}</i>`)).join('');
     o.innerHTML = `<canvas class="tl-rays"></canvas><div class="tally"><h2 class="tl-title">${title}</h2><br><p class="tl-sub">Manche ${snap.round} · premier à ${T}</p>
       ${order.map((p, k) => {
@@ -269,7 +310,7 @@ export class Play {
           <span class="tl-face"><img alt="" src="${this.face(p)}"></span>
           <b class="tl-name">${esc(this.who(p.id))}</b>
           <b class="tl-pts">${r.status === 'bust' ? '' : '+0'}</b>
-          <span class="tl-cards">${p.nums.map((c) => `<i class="chip${c.dup ? ' dup' : ''}">${c.v}</i>`).join('')}</span>
+          <span class="tl-cards">${[...p.nums, ...p.mods.slice().sort((a, b) => (b.t === 'x') - (a.t === 'x'))].map((c) => `<i class="${chipCls(c)}">${chipOf(c)}</i>`).join('')}</span>
           <div class="tl-foot"><span class="gauge"><i class="g1" style="width:${pct(before, T)}%"></i><i class="g2" style="left:${pct(before, T)}%"></i></span>
             <span class="tl-tot"><b>${before}</b> / ${T}</span></div>
         </div>`;
@@ -294,7 +335,11 @@ export class Play {
           if (!alive) return;
           ch.classList.add('go'); sound.play('flip');
           await W(230);
-          if (!bust && !ch.classList.contains('dup')) { run += +ch.textContent; pts.textContent = '+' + run; bump(pts); fly(ch, '+' + ch.textContent); }
+          if (!bust && !ch.classList.contains('dup')) {
+            const t = ch.textContent;
+            if (t === '×2') { run *= 2; pts.textContent = '+' + run; bump(pts); fly(ch, '×2'); }
+            else { run += +t.replace('+', ''); pts.textContent = '+' + run; bump(pts); fly(ch, t[0] === '+' ? t : '+' + t); }
+          }
         }
         if (bust) {
           await W(250);

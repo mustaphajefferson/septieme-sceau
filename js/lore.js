@@ -1,7 +1,7 @@
 // Le monde de la Fange — textes du guide (univers original).
 
-import { FOES, LORE, FOES2, LORE2 } from './content.js';
-export const BESTIAIRE = Object.fromEntries([...FOES.map((f, i) => ['f' + i, { name: f.name, ...LORE[i] }]), ...FOES2.map((f, i) => ['s' + i, { name: f.name, ...LORE2[i] }])]);
+import { FOES, LORE, FOES2, LORE2, FOES3, LORE3 } from './content.js';
+export const BESTIAIRE = Object.fromEntries([...FOES.map((f, i) => ['f' + i, { name: f.name, ...LORE[i] }]), ...FOES2.map((f, i) => ['s' + i, { name: f.name, ...LORE2[i] }]), ...FOES3.map((f, i) => ['w' + i, { name: f.name, ...LORE3[i] }])]);
 
 export const HELMS = ['Heaume-Lune', 'Cornes de bouc', 'Auréole de cuivre', 'Mitre de fer'];
 

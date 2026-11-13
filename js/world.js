@@ -3,7 +3,7 @@
 //  (originales), les gantelets du pèlerin, les décors du guide.
 // ─────────────────────────────────────────────────────────────
 import { THREE, TEX } from './render.js';
-import { FOES, FOES2, HERO2 } from './content.js';
+import { FOES, FOES2, HERO2, FOES3, HERO3 } from './content.js';
 
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const M = {};
@@ -95,7 +95,11 @@ export function makeGauntlet(side = 1) {
   const bones = new THREE.Group(); bones.visible = false; arm.add(bones);
   for (const dx of [-0.018, 0.018]) { const b = cyl(0.011, 0.014, 0.36, M.bone, 6); b.rotation.x = Math.PI / 2; at(b, dx, 0, 0.21); bones.add(b); }
   bones.add(at(sph(0.026, M.bone, 6, 5), 0, 0, 0.03));
-  root.userData.armParts = [va, cuff, spike, ...arm.children.filter((o) => o.geometry?.type === 'TorusGeometry')]; root.userData.bones = bones;
+  // version « sorcière » : une manche de robe évasée, un bracelet d'or
+  const sleeve = new THREE.Group(); sleeve.visible = false; arm.add(sleeve);
+  const slv = cyl(0.05, 0.11, 0.36, M.clothDark, 10); slv.rotation.x = Math.PI / 2; at(slv, 0, 0.0, 0.2); sleeve.add(slv);
+  const brac = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.01, 4, 12), M.bronze); at(brac, 0, 0, 0.04); sleeve.add(brac);
+  root.userData.armParts = [va, cuff, spike, ...arm.children.filter((o) => o.geometry?.type === 'TorusGeometry')]; root.userData.bones = bones; root.userData.sleeve = sleeve;
 
   const hand = new THREE.Group(); root.add(hand);
   hand.add(at(box(0.095, 0.03, 0.1, M.metal), 0, 0, -0.05));
@@ -422,6 +426,30 @@ export function buildCrypt(scene) {
     const th = at(new THREE.Group(), 0, 0, -4.4); g.add(th); th.add(at(box(1.2, 0.5, 0.8, M.bone), 0, 0.25, 0)); th.add(at(box(1.1, 2.6, 0.2, M.bone), 0, 1.5, -0.35)); for (let i = 0; i < 5; i++) th.add(at(makeSkull(1.8), -0.4 + i * 0.2, 2.9, -0.35));
     const rl = new THREE.SpotLight(0xff6a50, 40, 10, 0.4, 0.7, 1); rl.position.set(0, 4, -4.6); rl.target.position.set(0, 2, -4.4); g.add(rl, rl.target);
   }
+  { // parcours III · le Marais : eau verte autour de la table, saules, feux-follets
+    const g = new THREE.Group(); zones.marais = g; room.add(g);
+    const water = new THREE.Mesh(new THREE.RingGeometry(1.6, 12, 32), new THREE.MeshStandardMaterial({ color: 0x1a2412, metalness: 0.6, roughness: 0.3 })); water.rotation.x = -Math.PI / 2; at(water, 0, 0.02, -1.2); g.add(water);
+    const wm3 = new THREE.MeshStandardMaterial({ color: 0x4a5a2a, flatShading: true });
+    for (let k = 0; k < 10; k++) { const a = -1.5 + k * 0.33, rr = 3.6 + Math.random(); const t = at(new THREE.Group(), Math.sin(a) * rr, 0, -1.2 - Math.cos(a) * rr); t.add(at(cyl(0.12, 0.2, 2.2, M.wood, 6), 0, 1.1, 0)); t.add(at(sph(1.0, wm3, 7, 5), 0, 2.6, 0)); for (let j = 0; j < 9; j++) { const b = (j / 9) * Math.PI * 2; t.add(at(box(0.04, 1.6, 0.04, wm3), Math.cos(b) * 0.85, 1.8, Math.sin(b) * 0.85)); } g.add(t); }
+    const ws3 = []; for (let k = 0; k < 9; k++) { const w = at(sph(0.05, new THREE.MeshBasicMaterial({ color: 0xffe080 }), 6, 4), (Math.random() - 0.5) * 6, 0.8 + Math.random() * 1.6, -2 - Math.random() * 4); w.userData.p = Math.random() * 6; ws3.push(w); g.add(w); }
+    const wl = new THREE.PointLight(0xffe080, 8, 6, 1.2); wl.position.set(0, 2, -3.6); g.add(wl);
+    zones.marais.userData.tick = (t) => ws3.forEach((w) => { w.position.y += Math.sin(t * 1.3 + w.userData.p) * 0.004; w.visible = Math.sin(t * 2 + w.userData.p * 3) > -0.6; });
+  }
+  { // parcours III · les Cimes : neige au sol, sapins blancs, rochers
+    const g = new THREE.Group(); zones.cimes = g; room.add(g);
+    const snow = new THREE.MeshStandardMaterial({ color: 0xf0f4f8, flatShading: true, roughness: 1, emissive: 0x14181c });
+    const gr = new THREE.Mesh(new THREE.RingGeometry(1.5, 12, 32), snow); gr.rotation.x = -Math.PI / 2; at(gr, 0, 0.01, -1.2); g.add(gr);
+    for (let k = 0; k < 26; k++) { const a = Math.random() * Math.PI * 2, rr = 3.4 + Math.random() * 4.5; if (Math.cos(a) < -0.4 && rr < 5) continue; const s3 = 0.7 + Math.random() * 0.8, tr = new THREE.Group(); for (let j = 0; j < 4; j++) tr.add(at(cone(0.8 * s3 * (1 - j * 0.18), 1.3 * s3, snow, 7), 0, 0.9 * s3 + j * 0.75 * s3, 0)); at(tr, Math.sin(a) * rr, 0, -1.2 - Math.cos(a) * rr); g.add(tr); }
+  }
+  { // parcours III · l'Antre : rochers, monceaux d'or, braises au sol
+    const g = new THREE.Group(); zones.antre = g; room.add(g);
+    const rock = new THREE.MeshStandardMaterial({ color: 0x4a3a30, flatShading: true, roughness: 1 });
+    const goldM = new THREE.MeshStandardMaterial({ color: 0xe0b040, metalness: 0.3, roughness: 0.5, emissive: 0x3a2808, flatShading: true });
+    for (let k = 0; k < 12; k++) { const a = -1.6 + k * 0.29, rr = 3.8 + Math.random() * 1.5, h = 2 + Math.random() * 3; g.add(at(cone(0.6 + Math.random() * 0.6, h, rock, 5), Math.sin(a) * rr, h / 2, -1.2 - Math.cos(a) * rr)); }
+    for (let k = 0; k < 8; k++) { const a = -1.2 + k * 0.34, rr = 2.6 + Math.random() * 0.8; g.add(at(sph(0.5 + Math.random() * 0.5, goldM, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), Math.sin(a) * rr, 0, -1.2 - Math.cos(a) * rr)); }
+    const fl3 = new THREE.PointLight(0xff8a40, 10, 8, 1.1); fl3.position.set(0, 2.2, -4.6); g.add(fl3);
+    zones.antre.userData.tick = (t) => { fl3.intensity = 8 + Math.sin(t * 6) * 3; };
+  }
   // ambiances vivantes : lucioles (forêt), pluie (pont), braises (château)
   const AN = 260, apos = new Float32Array(AN * 3), avel = new Float32Array(AN * 3);
   const ag = new THREE.BufferGeometry(); ag.setAttribute('position', new THREE.BufferAttribute(apos, 3));
@@ -429,13 +457,13 @@ export function buildCrypt(scene) {
   const rainG = new THREE.BufferGeometry(), rpos = new Float32Array(AN * 6); rainG.setAttribute('position', new THREE.BufferAttribute(rpos, 3));
   const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: 0xc8d0d8 })); room.add(rain);
   let azone = 'chateau';
-  const seed = (i) => { apos[i * 3] = (Math.random() - 0.5) * 7; apos[i * 3 + 1] = Math.random() * 4.5; apos[i * 3 + 2] = -1.2 + (Math.random() - 0.5) * 7; avel[i * 3] = (Math.random() - 0.5) * 0.2; avel[i * 3 + 1] = azone === 'chateau' || azone === 'cathedrale' ? 0.15 + Math.random() * 0.3 : azone === 'limbes' ? 0.08 + Math.random() * 0.15 : azone === 'pont' ? -(5 + Math.random() * 2) : (Math.random() - 0.5) * 0.15; avel[i * 3 + 2] = (Math.random() - 0.5) * 0.2; };
+  const seed = (i) => { apos[i * 3] = (Math.random() - 0.5) * 7; apos[i * 3 + 1] = Math.random() * 4.5; apos[i * 3 + 2] = -1.2 + (Math.random() - 0.5) * 7; avel[i * 3] = (Math.random() - 0.5) * 0.2; avel[i * 3 + 1] = azone === 'cimes' ? -(0.4 + Math.random() * 0.5) : azone === 'chateau' || azone === 'cathedrale' || azone === 'antre' ? 0.15 + Math.random() * 0.3 : azone === 'limbes' ? 0.08 + Math.random() * 0.15 : azone === 'pont' ? -(5 + Math.random() * 2) : (Math.random() - 0.5) * 0.15; avel[i * 3 + 2] = (Math.random() - 0.5) * 0.2; };
   for (let i = 0; i < AN; i++) seed(i);
   const tickAmb = (t, dt) => {
     for (let i = 0; i < AN; i++) {
-      apos[i * 3] += (avel[i * 3] + (azone === 'foret' || azone === 'styx' || azone === 'limbes' ? Math.sin(t * 0.7 + i) * 0.15 : 0)) * dt;
+      apos[i * 3] += (avel[i * 3] + (azone === 'foret' || azone === 'styx' || azone === 'limbes' || azone === 'marais' || azone === 'cimes' ? Math.sin(t * 0.7 + i) * 0.15 : 0)) * dt;
       apos[i * 3 + 1] += avel[i * 3 + 1] * dt; apos[i * 3 + 2] += avel[i * 3 + 2] * dt;
-      if (apos[i * 3 + 1] < 0 || apos[i * 3 + 1] > 4.6 || Math.abs(apos[i * 3]) > 4) { seed(i); apos[i * 3 + 1] = azone === 'pont' ? 4.5 : azone === 'chateau' || azone === 'cathedrale' || azone === 'limbes' ? 0.2 : Math.random() * 3; }
+      if (apos[i * 3 + 1] < 0 || apos[i * 3 + 1] > 4.6 || Math.abs(apos[i * 3]) > 4) { seed(i); apos[i * 3 + 1] = azone === 'pont' || azone === 'cimes' ? 4.5 : azone === 'antre' ? 0.2 : azone === 'chateau' || azone === 'cathedrale' || azone === 'limbes' ? 0.2 : Math.random() * 3; }
       if (azone === 'pont') { const j = i * 6; rpos[j] = apos[i * 3]; rpos[j + 1] = apos[i * 3 + 1]; rpos[j + 2] = apos[i * 3 + 2]; rpos[j + 3] = apos[i * 3] - 0.02; rpos[j + 4] = apos[i * 3 + 1] + 0.18; rpos[j + 5] = apos[i * 3 + 2]; }
     }
     ag.attributes.position.needsUpdate = true; rainG.attributes.position.needsUpdate = true;
@@ -444,14 +472,14 @@ export function buildCrypt(scene) {
   const setZone = (z) => {
     azone = z;
     amb2.visible = z !== 'pont'; rain.visible = z === 'pont';
-    amb2.material.color.set({ foret: 0xffd070, limbes: 0xf0f0ff, styx: 0x9ff0e0 }[z] ?? 0xff7a2a); amb2.material.size = z === 'foret' || z === 'styx' ? 0.022 : z === 'limbes' ? 0.03 : 0.016;
+    amb2.material.color.set({ foret: 0xffd070, limbes: 0xf0f0ff, styx: 0x9ff0e0, marais: 0xffe070, cimes: 0xffffff }[z] ?? 0xff7a2a); amb2.material.size = z === 'foret' || z === 'styx' || z === 'marais' ? 0.022 : z === 'limbes' || z === 'cimes' ? 0.03 : 0.016;
     for (let i = 0; i < AN; i++) seed(i);
     for (const k in zones) zones[k].visible = k === z;
-    for (const w of walls) w.visible = z !== 'foret' && z !== 'limbes' && z !== 'styx';
-    const fogC = { foret: 0x8c9c82, pont: 0x565c64, chateau: 0x3c3830, limbes: 0x8a8692, styx: 0x283a3c, cathedrale: 0x40302a }[z];
-    amb.intensity = z === 'foret' || z === 'limbes' ? 3.4 : 2.4;
+    for (const w of walls) w.visible = !['foret', 'limbes', 'styx', 'marais', 'cimes', 'antre'].includes(z);
+    const fogC = { foret: 0x8c9c82, pont: 0x565c64, chateau: 0x3c3830, limbes: 0x8a8692, styx: 0x283a3c, cathedrale: 0x40302a, marais: 0x4a5434, cimes: 0x9aa8b8, antre: 0x3a2418 }[z];
+    amb.intensity = ['foret', 'limbes', 'cimes'].includes(z) ? 3.4 : 2.4;
     scene.fog.color.set(fogC); scene.background = new THREE.Color(fogC);
-    scene.fog.near = 2.6; scene.fog.far = z === 'foret' || z === 'limbes' ? 12 : 11;
+    scene.fog.near = 2.6; scene.fog.far = ['foret', 'limbes', 'marais', 'cimes'].includes(z) ? 12 : 11;
   };
   setZone('chateau');
   return {
@@ -711,6 +739,12 @@ function foeHead(kind) {
     case 'horns': h.add(at(skull(1.05), 0, 0, -0.02)); for (const sd of [-1, 1]) h.add(tube([[sd * 0.08, 0.08, 0], [sd * 0.22, 0.16, 0.06], [sd * 0.3, 0.05, 0.02], [sd * 0.24, -0.08, -0.06], [sd * 0.17, -0.02, -0.1]], 0.03, M.bone)); eyes(0.0, -0.11, M.eye, 0.035); break;
     case 'skull': h.add(at(skull(1.1), 0, 0, -0.02)); h.add(at(box(0.12, 0.04, 0.08, M.bone), 0, -0.14, -0.06)); eyes(0.0, -0.11, M.eyePale, 0.036); break;
     case 'ferry': h.add(lathe([[0, 0.44], [0.06, 0.38], [0.14, 0.24], [0.19, 0.06], [0.21, -0.14], [0.28, -0.32], [0, -0.32]], M.clothDark, 10)); h.add(at(sph(0.14, M.black, 8, 6), 0, 0.02, -0.08)); eyes(0.03, -0.225, M.eye, 0.034); break;
+    case 'frog': { const fm = new THREE.MeshStandardMaterial({ color: 0x6a7a3a, flatShading: true, roughness: 0.9 }); const hd = sph(0.17, fm, 10, 8); hd.scale.set(1.25, 0.75, 1.1); h.add(hd); for (const sx of [-1, 1]) { h.add(at(sph(0.06, fm, 8, 6), sx * 0.1, 0.1, -0.06)); h.add(at(sph(0.035, M.flameCore, 6, 5), sx * 0.1, 0.11, -0.11)); h.add(at(sph(0.015, M.black, 4, 4), sx * 0.1, 0.11, -0.145)); } h.add(at(box(0.26, 0.012, 0.02, M.black), 0, -0.04, -0.17)); h.add(at(crown(false), 0, 0.14, 0.02)); break; }
+    case 'willow': { const wm2 = new THREE.MeshStandardMaterial({ color: 0x5a5230, flatShading: true, roughness: 1 }); const hd = sph(0.14, wm2, 8, 6); hd.scale.y = 1.3; h.add(hd); for (let k = 0; k < 22; k++) { const a = (k / 22) * Math.PI * 2, r0 = 0.12; h.add(tube([[Math.cos(a) * r0, 0.15, Math.sin(a) * r0], [Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2], [Math.cos(a) * 0.24, -0.4 - Math.random() * 0.3, Math.sin(a) * 0.24]], 0.008, wm2)); } eyes(0.03, -0.14, M.eye, 0.04); break; }
+    case 'wisp': { hood(); const orb = sph(0.11, new THREE.MeshBasicMaterial({ color: 0xfff0a0 }), 10, 8); at(orb, 0, 0.02, -0.06); h.add(orb); h.add(at(sph(0.16, new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.35 }), 10, 8), 0, 0.02, -0.06)); break; }
+    case 'yeti': { const ym = new THREE.MeshStandardMaterial({ color: 0xe4e8ec, flatShading: true, roughness: 1 }); const hd = sph(0.2, ym, 9, 7); hd.scale.set(1.1, 1, 1); h.add(hd); for (let k = 0; k < 14; k++) { const a = Math.random() * Math.PI * 2, b = Math.random() * 1.2; const sp = cone(0.035, 0.12, ym, 4); sp.position.set(Math.cos(a) * Math.sin(b + 0.4) * 0.19, Math.cos(b + 0.4) * 0.2, Math.sin(a) * Math.sin(b + 0.4) * 0.19); sp.lookAt(sp.position.clone().multiplyScalar(3)); sp.rotateX(Math.PI / 2); h.add(sp); } h.add(at(box(0.2, 0.08, 0.04, M.black), 0, -0.02, -0.18)); eyes(0.06, -0.19, M.eyePale, 0.05); for (const sd of [-1, 1]) h.add(tube([[sd * 0.14, 0.12, 0], [sd * 0.26, 0.2, 0.04], [sd * 0.3, 0.06, -0.04]], 0.025, M.bone)); break; }
+    case 'witch': { const sk = new THREE.MeshStandardMaterial({ color: 0x8a9a7a, flatShading: true }); const hd = sph(0.12, sk, 8, 6); hd.scale.set(0.9, 1.1, 1); h.add(hd); const nose = cone(0.025, 0.12, sk, 5); nose.rotation.x = -Math.PI / 2 - 0.4; at(nose, 0, -0.01, -0.15); h.add(nose); h.add(at(cyl(0.34, 0.34, 0.02, M.clothDark, 16), 0, 0.1, 0)); const hat = cone(0.15, 0.48, M.clothDark, 12); hat.rotation.z = 0.25; at(hat, 0.04, 0.34, 0.02); h.add(hat); eyes(0.03, -0.11, M.eye, 0.04); break; }
+    case 'angel': { const mk2 = new THREE.MeshStandardMaterial({ color: 0xe8dcb8, emissive: 0x3a3424, flatShading: true }); const m = sph(0.15, mk2, 12, 10); m.scale.set(0.82, 1.1, 0.7); at(m, 0, 0, -0.02); h.add(m); for (const sx of [-1, 1]) { const sl = box(0.07, 0.016, 0.02, M.flameCore); at(sl, sx * 0.045, 0.02, -0.12); sl.rotation.z = sx * -0.25; h.add(sl); } const hal = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.018, 5, 28), M.flameCore); at(hal, 0, 0.06, 0.12); h.add(hal); h.userData.halo = hal; break; }
     case 'death': hood(); h.add(at(skull(0.95), 0, -0.02, -0.13)); eyes(0.0, -0.23, M.eye, 0.033); h.add(at(crown(false), 0, 0.2, 0.02)); break;
     default: h.add(cyl(0.14, 0.14, 0.28, M.metal, 10));
   }
@@ -748,12 +782,60 @@ export function buildFoe(kit = {}) {
   if (ex.includes('crozier')) { const cz = at(new THREE.Group(), 0.5, 0, -0.15); root.add(cz); cz.add(at(cyl(0.015, 0.015, 2.1, M.wood, 6), 0, 1.05, 0)); cz.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 5, 12, Math.PI * 1.5), M.bronze), 0.1, 2.1, 0)); }
   if (ex.includes('banner')) { const bn = at(new THREE.Group(), -0.6, 0, 0.1); root.add(bn); bn.add(at(cyl(0.02, 0.02, 2.6, M.wood, 6), 0, 1.3, 0)); const fl = at(box(0.6, 1.1, 0.01, M.cloth), 0.32, 2.0, 0); bn.add(fl); fl.add(at(box(0.06, 0.6, 0.02, M.black), 0, 0.05, -0.01)); fl.add(at(box(0.4, 0.06, 0.02, M.black), 0, 0.2, -0.01)); ticks.push((t) => { fl.rotation.y = Math.sin(t * 1.2) * 0.15; }); }
   if (ex.includes('lantern')) { const ln = at(new THREE.Group(), 0.42, 0.95, -0.5); root.add(ln); ln.add(at(cyl(0.01, 0.01, 0.5, M.wood, 4), 0, 0.25, 0)); ln.add(at(box(0.1, 0.13, 0.1, M.metalDark), 0, -0.05, 0)); const fl = makeFlame(1.6, false); at(fl, 0, -0.08, 0); ln.add(fl); ticks.push((t) => { fl.userData.flicker(t); ln.rotation.z = Math.sin(t * 1.3) * 0.08; }); }
+  if (ex.includes('wings')) { // six ailes semées d'yeux
+    const wm = new THREE.MeshStandardMaterial({ color: 0xe0d6bc, emissive: 0x2a2418, flatShading: true, side: THREE.DoubleSide });
+    const wingsG = at(new THREE.Group(), 0, 1.3, 0.2); root.add(wingsG); const ws = [];
+    [[0.9, 1.5], [0.35, 1.7], [-0.25, 1.3]].forEach(([a, len], k) => { for (const sd of [-1, 1]) {
+      const w = new THREE.Group(); w.rotation.z = sd * (Math.PI / 2 - a); w.rotation.y = sd * 0.35; wingsG.add(w); ws.push([w, sd, k]);
+      for (let f = 0; f < 6; f++) { const fe = box(0.07, len * (0.55 + f * 0.08), 0.012, wm); at(fe, sd * (0.06 + f * 0.07), len * (0.3 + f * 0.04), 0); fe.rotation.z = sd * -0.12 * f; w.add(fe); }
+      for (let e = 0; e < 3; e++) { const ey = sph(0.03, M.flameCore, 6, 5); at(ey, sd * (0.12 + e * 0.12), len * (0.35 + e * 0.15), -0.02); w.add(ey); }
+    } });
+    ticks.push((t) => ws.forEach(([w, sd, k]) => { w.rotation.x = Math.sin(t * 0.8 + k) * 0.12; }));
+  }
   if (ex.includes('scythe')) { const sc = at(new THREE.Group(), -0.52, 0, -0.25); root.add(sc); sc.add(at(cyl(0.018, 0.018, 2.4, M.wood, 6), 0, 1.2, 0)); sc.add(tube([[0, 2.36, 0], [0.3, 2.42, -0.1], [0.62, 2.3, -0.12], [0.85, 2.05, -0.06]], 0.022, M.metal)); }
   if (kit.sword === 'bourreau') { const sw = at(new THREE.Group(), 0.55, 0, -0.2); sw.rotation.z = 0.1; root.add(sw); sw.add(at(box(0.11, 1.1, 0.015, M.metal), 0, 0.6, 0)); sw.add(at(box(0.36, 0.04, 0.04, M.metalDark), 0, 1.16, 0)); sw.add(at(box(0.04, 0.3, 0.04, M.clothDark), 0, 1.33, 0)); }
   if (kit.shield) { const sh = at(new THREE.Group(), -0.48, 0.75, -0.2); sh.rotation.y = 0.5; root.add(sh); sh.add(box(0.45, 0.55, 0.04, M.wood)); sh.add(at(box(0.06, 0.5, 0.05, M.metal), 0, 0, -0.01)); sh.add(at(box(0.4, 0.06, 0.05, M.metal), 0, 0.08, -0.01)); }
   if (kit.head === 'kettle') { const cb = at(new THREE.Group(), 0.45, 0.95, -0.4); root.add(cb); cb.add(at(box(0.05, 0.05, 0.6, M.wood), 0, 0, 0)); cb.add(at(box(0.5, 0.03, 0.03, M.metalDark), 0, 0.02, -0.25)); }
+  if (kit.scale) root.scale.setScalar(kit.scale);
   brighten(root);
   return seated(root, head, { tick: (t) => ticks.forEach((f) => f(t)) });
+}
+// ── Le Dragon : une tête immense penchée sur la table, les ailes repliées derrière ──
+export function buildDragon() {
+  mats();
+  const root = new THREE.Group();
+  const sc = new THREE.MeshStandardMaterial({ color: 0x8a3a1a, flatShading: true, roughness: 0.7, emissive: 0x200804 });
+  const belly = new THREE.MeshStandardMaterial({ color: 0xc89a4a, flatShading: true, roughness: 0.8 });
+  const torso = lathe([[0, 0], [0.7, 0], [0.75, 0.5], [0.6, 1.1], [0.35, 1.5], [0, 1.6]], sc, 12); at(torso, 0, 0.2, 0.9); root.add(torso); root.userData.torso = torso;
+  const neck = tube([[0, 1.5, 0.8], [0, 1.95, 0.45], [0, 2.05, 0.05], [0, 1.9, -0.25]], 0.2, sc); root.add(neck);
+  for (let k = 0; k < 6; k++) root.add(at(cone(0.06, 0.2, belly, 4), 0, 1.62 + k * 0.08, 0.72 - k * 0.12));
+  const head = at(new THREE.Group(), 0, 1.75, -0.35); root.add(head);
+  const hg = new THREE.Group(); hg.rotation.y = 0.45; hg.rotation.x = 0.12; hg.scale.setScalar(1.35); head.add(hg);
+  const skull = sph(0.24, sc, 10, 8); skull.scale.set(0.95, 0.78, 1.0); hg.add(skull);
+  const snout = cone(0.17, 0.62, sc, 8); snout.rotation.x = -Math.PI / 2; snout.scale.set(1, 1, 0.7); at(snout, 0, -0.03, -0.42); hg.add(snout);
+  for (const sx of [-1, 1]) { const brow = box(0.14, 0.05, 0.16, sc); at(brow, sx * 0.11, 0.13, -0.16); brow.rotation.z = sx * 0.35; hg.add(brow); }
+  const jaw = cone(0.12, 0.56, belly, 6); jaw.rotation.x = -Math.PI / 2 + 0.28; jaw.scale.set(1, 1, 0.5); at(jaw, 0, -0.17, -0.36); hg.add(jaw);
+  const maw = box(0.12, 0.05, 0.4, new THREE.MeshBasicMaterial({ color: 0xffa040 })); at(maw, 0, -0.12, -0.4); maw.rotation.x = 0.14; hg.add(maw);
+  for (let k = 0; k < 5; k++) for (const sx of [-1, 1]) { const tt = cone(0.016, 0.07, M.bone, 4); tt.rotation.x = Math.PI; at(tt, sx * (0.03 + k * 0.022), -0.1, -0.62 + k * 0.08); hg.add(tt); }
+  for (const sx of [-1, 1]) {
+    const e = sph(0.055, M.eye, 6, 5); at(e, sx * 0.15, 0.07, -0.2); hg.add(e);
+    hg.add(tube([[sx * 0.15, 0.13, 0.1], [sx * 0.3, 0.32, 0.3], [sx * 0.34, 0.5, 0.58]], 0.04, M.bone));
+    hg.add(at(sph(0.025, M.black, 4, 4), sx * 0.05, 0.05, -0.68));
+    // ailes repliées
+    const w = at(new THREE.Group(), sx * 0.6, 1.4, 1.0); root.add(w);
+    w.add(tube([[0, 0, 0], [sx * 0.7, 0.9, 0.2], [sx * 1.0, 1.7, 0.5]], 0.05, sc));
+    const mem = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([V3(0, 0, 0), V3(sx * 1.0, 1.7, 0.5), V3(sx * 1.3, 0.2, 0.7), V3(0, 0, 0), V3(sx * 1.3, 0.2, 0.7), V3(sx * 0.4, -0.7, 0.6)]), new THREE.MeshStandardMaterial({ color: 0x5a1e10, side: THREE.DoubleSide, flatShading: true }));
+    mem.geometry.computeVertexNormals(); w.add(mem); root.userData['wing' + sx] = w;
+    // pattes griffues posées sur le bord
+    const cl = at(new THREE.Group(), sx * 0.42, 0.86, -0.42); root.add(cl);
+    cl.add(at(box(0.16, 0.08, 0.2, sc), 0, 0, 0));
+    for (let k = 0; k < 3; k++) { const c = cone(0.02, 0.1, M.bone, 4); c.rotation.x = -Math.PI / 2 - 0.4; at(c, (k - 1) * 0.05, -0.02, -0.13); cl.add(c); }
+    root.add(tube([[sx * 0.55, 1.2, 0.5], [sx * 0.6, 1.0, 0.0], [sx * 0.42, 0.88, -0.36]], 0.07, sc));
+  }
+  const fire = new THREE.PointLight(0xff7030, 5, 3, 1.2); fire.position.set(0, 1.7, -0.9); root.add(fire); root.userData.big = true;
+  const inner = new THREE.Group(); for (const ch of [...root.children]) inner.add(ch); inner.position.y = -0.42; inner.position.z = -0.1; root.add(inner);
+  brighten(root);
+  return seated(root, head, { tick: (t) => { head.position.y = 1.75 + Math.sin(t * 0.6) * 0.04; maw.scale.y = 1 + Math.sin(t * 6) * 0.3; fire.intensity = 4 + Math.sin(t * 7) * 1.5; const wv = Math.sin(t * 0.5) * 0.06; root.userData['wing1'].rotation.z = wv; root.userData['wing-1'].rotation.z = -wv; } });
 }
 // les adversaires doivent se lire d'un coup d'œil : pas de métal « miroir » (sans reflet, il paraît noir),
 // des teintes relevées et une lueur propre très légère
@@ -775,8 +857,9 @@ function brighten(root) {
 
 export function makeCreature(kind, variant = 0) {
   if (kind === 'pelerin') return CREATURES.pelerin(variant);
-  if (/^[fs]\d+$/.test(kind)) return buildFoe((kind[0] === 'f' ? FOES : FOES2)[+kind.slice(1)].kit);
+  if (/^[fsw]\d+$/.test(kind)) { const kit = ({ f: FOES, s: FOES2, w: FOES3 })[kind[0]][+kind.slice(1)].kit; return kit.dragon ? buildDragon() : buildFoe(kit); }
   if (kind === 'h2') return buildFoe(HERO2);
+  if (kind === 'h3') return buildFoe(HERO3);
   return CREATURES[kind]();
 }
 
@@ -884,6 +967,39 @@ export function buildExterior(scene) {
     const rl = new THREE.SpotLight(0xff5a40, 220, 40, 0.6, 0.8, 1); rl.position.set(0, 8.5, -25); rl.target.position.set(0, 0, -8); ca.add(rl, rl.target);
     const cs2 = new THREE.SpotLight(0xf0e0c8, 120, 40, 0.5, 0.9, 1); cs2.position.set(3, 7, -6); cs2.target.position.set(0, 3, -20); ca.add(cs2, cs2.target);
     ticks.cathedrale = (t) => { rose.rotation.z = t * 0.03; };
+  }
+  // ── parcours III : marais, cimes, antre ──
+  { // le Marais des Feux-follets : eau verte, saules, cabane sur pilotis, feux-follets
+    const m = new THREE.Group(); Z.marais = m; g.add(m);
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(60, 40), new THREE.MeshStandardMaterial({ color: 0x1a2412, metalness: 0.6, roughness: 0.3 })); water.rotation.x = -Math.PI / 2; at(water, 0, 0.04, -20); m.add(water);
+    const wil = (x, z, s2) => { const t = at(new THREE.Group(), x, 0, z); t.add(at(cyl(0.18 * s2, 0.3 * s2, 2.6 * s2, M.wood, 6), 0, 1.3 * s2, 0)); const crownM = new THREE.MeshStandardMaterial({ color: 0x4a5a2a, flatShading: true }); t.add(at(sph(1.3 * s2, crownM, 7, 5), 0, 3 * s2, 0)); for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; t.add(at(box(0.05, 2 * s2, 0.05, crownM), Math.cos(a) * 1.1 * s2, 2.1 * s2, Math.sin(a) * 1.1 * s2)); } return t; };
+    for (let k = 0; k < 22; k++) { const x = (Math.random() - 0.5) * 40, z = -6 - Math.random() * 28; if (Math.abs(x) < 2.4 && z > -16) continue; m.add(wil(x, z, 0.7 + Math.random() * 0.8)); }
+    const hut = at(new THREE.Group(), 2.6, 0, -15); m.add(hut); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) hut.add(at(cyl(0.08, 0.08, 1.6, M.wood, 5), x, 0.8, z)); hut.add(at(box(2.4, 1.6, 2.2, M.wood), 0, 2.4, 0)); hut.add(at(cone(1.9, 1.4, dark, 4), 0, 3.9, 0)); hut.add(at(box(0.4, 0.5, 0.1, win), 0, 2.5, -1.12));
+    const wisps = []; for (let k = 0; k < 18; k++) { const w = at(sph(0.08, new THREE.MeshBasicMaterial({ color: 0xffe080 }), 6, 4), (Math.random() - 0.5) * 16, 0.6 + Math.random() * 2, -6 - Math.random() * 16); w.userData.p = Math.random() * 6; wisps.push(w); m.add(w); }
+    const ms2 = new THREE.SpotLight(0xe0f0b0, 140, 40, 0.7, 0.9, 1); ms2.position.set(-3, 10, -4); ms2.target.position.set(0, 1, -16); m.add(ms2, ms2.target);
+    ticks.marais = (t) => wisps.forEach((w) => { w.position.y += Math.sin(t * 1.3 + w.userData.p) * 0.006; w.position.x += Math.cos(t * 0.7 + w.userData.p) * 0.006; w.visible = Math.sin(t * 2 + w.userData.p * 3) > -0.6; });
+  }
+  { // les Cimes gelées : pics, sapins blancs, col et monastère
+    const ci = new THREE.Group(); Z.cimes = ci; g.add(ci);
+    const snow = new THREE.MeshStandardMaterial({ color: 0xf0f4f8, flatShading: true, roughness: 1, emissive: 0x1a1e24 });
+    for (let k = 0; k < 9; k++) { const x = -26 + k * 6.5, h = 10 + Math.random() * 12; ci.add(at(cone(4 + Math.random() * 3, h, k % 2 ? dark : snow, 5), x, h / 2, -32 - Math.random() * 6)); ci.add(at(cone(1.6, h * 0.3, snow, 5), x, h * 0.86, -32)); }
+    for (let k = 0; k < 40; k++) { const x = (Math.random() - 0.5) * 40, z = -6 - Math.random() * 22; if (Math.abs(x) < 2.4 && z > -16) continue; const t = pine(x, z, 0.7 + Math.random()); t.traverse((o) => { if (o.isMesh && o.material === pineM) o.material = snow; }); ci.add(t); }
+    const mon = at(new THREE.Group(), -3, 0, -22); ci.add(mon); mon.add(at(box(5, 3, 3, pale), 0, 1.5, 0)); mon.add(at(cyl(0.8, 0.9, 6, pale, 8), 2, 3, 0)); mon.add(at(cone(1.1, 2, dark, 8), 2, 7, 0)); mon.add(at(box(0.3, 0.6, 0.1, win), 2, 4, 0.85));
+    const flakes = []; for (let k = 0; k < 120; k++) { const f = at(box(0.05, 0.05, 0.05, snow), (Math.random() - 0.5) * 20, Math.random() * 10, -4 - Math.random() * 16); flakes.push(f); ci.add(f); }
+    const cs3 = new THREE.SpotLight(0xe0ecff, 160, 50, 0.7, 0.9, 1); cs3.position.set(4, 12, -4); cs3.target.position.set(0, 2, -24); ci.add(cs3, cs3.target);
+    ticks.cimes = (t) => flakes.forEach((f, i) => { f.position.y -= 0.02; f.position.x += Math.sin(t + i) * 0.01; if (f.position.y < 0) f.position.y = 10; });
+  }
+  { // l'Antre du Dragon : gueule de caverne, monceaux d'or, braises
+    const an = new THREE.Group(); Z.antre = an; g.add(an);
+    const rock = new THREE.MeshStandardMaterial({ color: 0x4a3a30, flatShading: true, roughness: 1 });
+    for (let k = 0; k < 18; k++) { const sd = k % 2 ? 1 : -1, h = 4 + Math.random() * 10; an.add(at(cone(1.5 + Math.random() * 2, h, rock, 5), sd * (3 + Math.random() * 10), h / 2, -10 - Math.random() * 20)); }
+    const cave = at(new THREE.Group(), 0, 0, -24); an.add(cave); cave.add(at(box(30, 14, 2, rock), 0, 7, -1)); cave.add(at(new THREE.Mesh(new THREE.CircleGeometry(4.2, 12), new THREE.MeshBasicMaterial({ color: 0x120604 })), 0, 3.4, 0.05)); cave.add(at(new THREE.Mesh(new THREE.CircleGeometry(1.6, 10), new THREE.MeshBasicMaterial({ color: 0xffb040 })), -1.2, 2.2, 0.06)); cave.add(at(new THREE.Mesh(new THREE.CircleGeometry(1.6, 10), new THREE.MeshBasicMaterial({ color: 0xffb040 })), 1.2, 2.2, 0.06)); for (let k = 0; k < 9; k++) { const a = Math.PI * (0.1 + k * 0.1); const fang = cone(0.5, 1.8, M.bone, 4); fang.rotation.z = Math.PI; at(fang, Math.cos(a) * 4, 3.4 + Math.sin(a) * 4 - 0.6, 0.3); cave.add(fang); }
+    const goldM = new THREE.MeshStandardMaterial({ color: 0xe0b040, metalness: 0.3, roughness: 0.5, emissive: 0x3a2808, flatShading: true });
+    for (let k = 0; k < 9; k++) an.add(at(sph(1 + Math.random() * 1.5, goldM, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), (Math.random() - 0.5) * 14, 0, -14 - Math.random() * 8));
+    const embs = []; for (let k = 0; k < 50; k++) { const e = at(box(0.06, 0.06, 0.06, new THREE.MeshBasicMaterial({ color: 0xff7030 })), (Math.random() - 0.5) * 12, Math.random() * 8, -8 - Math.random() * 14); embs.push(e); an.add(e); }
+    const fl = new THREE.PointLight(0xff8a40, 60, 30, 1); fl.position.set(0, 4, -20); an.add(fl);
+    const as3 = new THREE.SpotLight(0xffd8a0, 120, 40, 0.7, 0.9, 1); as3.position.set(3, 10, -4); as3.target.position.set(0, 2, -20); an.add(as3, as3.target);
+    ticks.antre = (t) => { fl.intensity = 50 + Math.sin(t * 5) * 10; embs.forEach((e, i) => { e.position.y += 0.02; e.position.x += Math.sin(t + i) * 0.006; if (e.position.y > 9) e.position.y = 0; }); };
   }
   scene.add(new THREE.HemisphereLight(0xc8ccd0, 0x2a2a26, 2.6));
   const moonL = new THREE.DirectionalLight(0xe8ecf8, 3.2); moonL.position.set(6, 12, 8); scene.add(moonL);

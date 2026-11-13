@@ -5,11 +5,12 @@
 //  rouille et or au tramage).
 // ─────────────────────────────────────────────────────────────
 import { T, registerDeck } from './cardart.js';
-import { hand, bigSkull, crown, arch, bars, glow, column } from './plates.js';
+import { hand, bigSkull, crown, arch, bars, glow, column, angel, scales } from './plates.js';
+import { SART1 } from './specials.js';
 const { K, P, R, G, tone, WW, WH, B, TAU, shape, line, seg, disc, box, inside, hatch, shade, rays, burst, halo, skyNight, skyDay, cloud, land, grass, tree, bramble, flame, candle, skull, raven, bat, bricks, pathOf } = T;
 const full = (c, col = K) => { c.fillStyle = col; c.fillRect(-B, -B, WW + 2 * B, WH + 2 * B); };
 
-export const NAMES2 = ["L'Oubli", "L'Obole", 'Le Sablier', 'Le Passeur', 'La Balance', 'Le Chien des enfers', 'La Faux', 'Le Septième Cercle', "L'Ossuaire", 'Le Brasier', 'La Porte', 'Le Cœur', 'La Mort'];
+export const NAMES2 = ["L'Oubli", "L'Obole", 'Le Sablier', 'Le Passeur', 'La Balance', 'Le Chien des enfers', 'La Faux', 'Le Septième Cercle', "L'Ossuaire", 'Le Brasier', 'La Porte', 'Le Cœur', 'Le Jugement'];
 export const COLORS2 = ['#000000', '#0b0a0e', '#dcd6c8', '#b3222e', '#6fcdb4']; // vide, encre, os, sang, lueur
 
 /** une silhouette encapuchonnée (de face ou de profil), (x, y) = les pieds */
@@ -153,12 +154,45 @@ ART2[11] = (L, r) => {
   L.near((c) => { bramble(c, [[-14, 150], [40, 120], [96, 160], [150, 120], [206, 150]], r, { lw: 3 }); });
   L.pop((c) => { seg(c, 30, 40, 160, 196, 6, K); seg(c, 31, 40, 161, 196, 2, P); seg(c, 40, 34, 22, 52, 5, K); disc(c, 24, 26, 5, G, 1.2); });
 };
-// 12 — La Mort : couronnée, la faux derrière elle
+// 12 — Le Jugement : l'Ange aux mille yeux et sa balance
 ART2[12] = (L, r) => {
-  L.bg((c) => { full(c); halo(c, 96, 100, 10, 160, 150, 0); burst(c, 96, 100, 70, 220, 22, tone(140), -Math.PI / 2, 0.12); });
-  L.far((c) => { seg(c, 160, 256, 170, 6, 4, P); const bl = [[170, 10], [120, -2], [70, 14], [44, 40], [84, 26], [128, 22], [168, 26]]; shape(c, bl, { fill: P, lw: 2 }); shade(c, bl, 40, -4, 130, 46, { ang: 0.3, gap: 3 }); });
-  L.main((c) => { const hood = [[-12, 256], [10, 160], [36, 80], [96, 34], [156, 80], [182, 160], [204, 256]]; shape(c, hood, { fill: K, stroke: P, lw: 1.6 }); bigSkull(c, 96, 128, 0.95); });
-  L.near((c) => { crown(c, 96, 70, 1.3); for (const sx of [-1, 1]) disc(c, 96 + sx * 18, 116, 3, G); });
+  L.bg((c) => { full(c); halo(c, 96, 100, 10, 160, 150, 0); burst(c, 96, 100, 60, 220, 30, tone(140), -Math.PI / 2, 0.1); });
+  L.main((c) => { c.save(); c.translate(96, 96); c.scale(0.92, 0.92); c.translate(-96, -96); angel(c, 96, 96, 1); c.restore(); });
+  L.near((c) => { scales(c, 96, 196, 0.8, -0.14); });
 };
 
-registerDeck(1, { names: NAMES2, colors: COLORS2, art: ART2 });
+
+// ── le cadre du deck des morts : carte noire, arc brisé, titre en haut, chiffre dans un médaillon d'os ──
+const { CW, CH } = T, WIN = { x: 16, y: 46 };
+function vert(c, x, y, a) { c.save(); c.translate(x, y); c.rotate(a); shape(c, [[-3, -2], [3, -2], [4, 0], [3, 2], [-3, 2], [-4, 0]], { fill: P, lw: 0.8, smooth: false }); c.restore(); }
+function frame1(c, v, title) {
+  c.fillStyle = K; c.fillRect(0, 0, CW, CH);
+  const { x: wx, y: wy } = WIN;
+  // fenêtre : arc brisé
+  const top = wy + 4, sh = wy + 70, path = (q) => { q.moveTo(wx, wy + WH); q.lineTo(wx, sh); q.quadraticCurveTo(wx, top + 6, wx + WW / 2, top); q.quadraticCurveTo(wx + WW, top + 6, wx + WW, sh); q.lineTo(wx + WW, wy + WH); q.closePath(); };
+  c.save(); c.beginPath(); path(c); c.clip(); c.clearRect(wx, wy, WW, WH); c.restore();
+  c.strokeStyle = P; c.lineWidth = 2; c.beginPath(); path(c); c.stroke();
+  c.lineWidth = 1; c.save(); c.translate(CW / 2, (wy + WH / 2)); c.scale(1.04, 1.02); c.translate(-CW / 2, -(wy + WH / 2)); c.beginPath(); path(c); c.stroke(); c.restore();
+  // colonnes de vertèbres
+  for (const x of [8, CW - 8]) for (let y = 20; y < CH - 16; y += 7) vert(c, x, y, 0);
+  box(c, 3, 3, CW - 6, CH - 6, 1.5, P);
+  // bandeau du titre
+  const ban = [[22, 10], [CW - 22, 10], [CW - 14, 22], [CW - 22, 36], [22, 36], [14, 22]];
+  shape(c, ban, { fill: P, stroke: K, lw: 1.5, smooth: false }); seg(c, 26, 14, CW - 26, 14, 1, K); seg(c, 26, 32, CW - 26, 32, 1, K);
+  c.fillStyle = K; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  let fs = 21; c.font = `700 ${fs}px Grenze`; while (c.measureText(title).width > CW - 60 && fs > 12) c.font = `700 ${--fs}px Grenze`;
+  c.fillText(title, CW / 2, 29);
+  // os croisés sous la fenêtre
+  for (const s of [-1, 1]) { const x0 = CW / 2 + s * 34, x1 = CW / 2 + s * 96; seg(c, x0, wy + WH + 18, x1, wy + WH + 26, 3, P); seg(c, x0, wy + WH + 26, x1, wy + WH + 14, 3, P); for (const [xx, yy] of [[x1, wy + WH + 26], [x1, wy + WH + 14]]) { disc(c, xx, yy - 1.5, 2.4, P); disc(c, xx, yy + 1.5, 2.4, P); } }
+}
+function tab1(c, v) {
+  const x = CW / 2, y = WIN.y + WH + 20;
+  disc(c, x, y, 25, K); disc(c, x, y, 22, P, 2, K); disc(c, x, y, 18, null, 1, K);
+  if (typeof v === 'number' || v[0] === 'm' || v === 'x2') {
+    const lab = typeof v === 'number' ? String(v) : v[0] === 'm' ? '+' + v.slice(1) : '×2';
+    c.fillStyle = K; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.font = `700 ${lab.length > 2 ? 22 : lab.length > 1 ? 28 : 32}px Grenze`; c.fillText(lab, x, y + 10);
+  } else skull(c, x, y + 1, 1.1);
+}
+function back1(c) { skull(c, CW / 2, CH / 2 + 2, 2.6); for (const s of [-1, 1]) { seg(c, CW / 2 + s * 20, CH / 2 + 46, CW / 2 + s * 50, CH / 2 + 60, 3, P); } }
+
+registerDeck(1, { names: { ...NAMES2, freeze: 'Le Linceul', three: 'La Danse macabre', chance: 'Le Réveil', mod: 'Offrande', x2: 'Les Deux Âmes' }, colors: COLORS2, art: ART2, sart: SART1, frame: frame1, tab: tab1, win: WIN, backMark: back1 });
