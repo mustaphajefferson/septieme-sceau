@@ -643,9 +643,10 @@ export function cardFace(v, plain = false) {
 }
 
 /** Assemble les calques dans `out` (codes 0–4), décalés selon l'inclinaison (tx, ty ∈ [-1, 1]). */
-export function compose(face, out, tx = 0, ty = 0, depth = 7) {
-  out.fill(2);
+export function compose(face, out, tx = 0, ty = 0, depth = 7, hidden = null) {
+  out.fill(face.fill ?? 2);
   for (const L of face.layers) {
+    if (hidden && L.id && hidden.has(L.id)) continue;
     const dx = Math.round(L.z * tx * depth), dy = Math.round(L.z * ty * depth);
     const x0 = L.clip ? WX : Math.max(0, L.x + dx), x1 = L.clip ? WX + WW : Math.min(CW, L.x + dx + L.w), y0 = L.clip ? WY : Math.max(0, L.y + dy), y1 = L.clip ? WY + WH : Math.min(CH, L.y + dy + L.h);
     for (let y = y0; y < y1; y++) { const sy = y - L.y - dy; if (sy < 0 || sy >= L.h) continue; const ro = sy * L.w - L.x - dx, oo = y * CW; for (let x = x0; x < x1; x++) { const q = L.d[ro + x]; if (q) out[oo + x] = q; } }
@@ -688,3 +689,25 @@ export function backCanvas() {
   const out = paint(encode(cv)); flat.set('back', out); return out;
 }
 export function clearCards() { faces.clear(); flat.clear(); }
+
+// ═════════════════════════════════════════════════════════════
+//  Les planches des cinématiques : même outillage, même fenêtre
+//  que les cartes (192 × 240 + débord), sans cartouche.
+// ═════════════════════════════════════════════════════════════
+export const T = { K, P, R, G, tone, WW, WH, B, TAU, spline, poly, pathOf, shape, line, seg, disc, box, inside, hatch, shade, rays, burst, halo, skyNight, skyDay, cloud, land, grass, tree, bramble, flame, candle, skull, raven, bat, bird, bell, moth, bricks, wing };
+export const PLATE = { WX, WY, WW, WH };
+/** fn(L, r, T) avec L.bg/far/main/near/pop(fn) et L.extra(z, id, fn) pour un calque qu'on allume ou éteint pendant la planche */
+export function plateFace(fn, seed = 1) {
+  const layers = [], r = rng(seed * 7919 + 101);
+  const art = (z, f, id) => { const cv = mk(WW + 2 * B, WH + 2 * B), c = ctxOf(cv); c.translate(B, B); f(c); layers.push({ z, id, x: WX - B, y: WY - B, w: cv.width, h: cv.height, clip: true, d: encode(cv) }); };
+  const full = (z, f, id) => { const cv = mk(CW, CH), c = ctxOf(cv); f(c); layers.push({ z, id, x: 0, y: 0, w: CW, h: CH, clip: false, d: encode(cv) }); };
+  let pop = [];
+  fn({ bg: (f) => art(-1, f), far: (f) => art(-0.5, f), main: (f) => art(0.3, f), near: (f) => art(0.85, f), pop: (f) => pop.push(f), extra: (z, id, f) => art(z, f, id) }, r, T);
+  full(0, (c) => { // passe-partout noir, double filet
+    c.fillStyle = K; c.fillRect(0, 0, CW, CH); c.clearRect(WX, WY, WW, WH);
+    box(c, WX - 4, WY - 4, WW + 8, WH + 8, 1, P); box(c, WX - 1, WY - 1, WW + 2, WH + 2, 1, P);
+    for (const [x, y] of [[WX - 4, WY - 4], [WX + WW + 4, WY - 4], [WX - 4, WY + WH + 4], [WX + WW + 4, WY + WH + 4]]) shape(c, [[x, y - 4], [x + 4, y], [x, y + 4], [x - 4, y]], { smooth: false, fill: G, lw: 0 });
+  });
+  for (const f of pop) full(1.3, (c) => { c.translate(WX, WY); f(c); });
+  return { layers, fill: 1 };
+}

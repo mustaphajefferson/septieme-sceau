@@ -19,6 +19,8 @@ import { CardView } from './cardview.js';
 import { installDotUI } from './dotui.js';
 import { wait } from './fx.js';
 import { Rush } from './fx2d.js';
+import { Cine } from './cine.js';
+import { STORY } from './story.js';
 
 // ⚠ outils de test (bouton « dev » en bas à gauche) — à retirer avant la sortie
 const DEV = true;
@@ -29,13 +31,13 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ── sauvegarde ───────────────────────────────────────────────
 const KEY = 'vii-save-4';
-const fresh = () => ({ ranks: [], node: 0, score: 0 });
+const fresh = () => ({ ranks: [], node: 0, score: 0, seen: {} });
 let save = (() => { try { return { ...fresh(), ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return fresh(); } })();
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch { /* */ } };
 { // raccourcis de test : ?reset · ?jusqua=N
   const q = new URLSearchParams(location.search);
   if (q.has('reset')) { save = fresh(); persist(); }
-  if (q.has('jusqua')) { save = fresh(); const n = Math.min(12, +q.get('jusqua') || 0); for (let i = 0; i < n; i++) save.ranks.push(i + 1); save.node = n; persist(); }
+  if (q.has('jusqua')) { save = fresh(); const n = Math.min(12, +q.get('jusqua') || 0); for (let i = 0; i < n; i++) save.ranks.push(i + 1); save.node = n; save.seen = { intro: 1 }; persist(); }
 }
 const done = () => save.node >= 12;
 const owns = (v) => v === 0 || save.ranks.includes(v);
@@ -63,6 +65,8 @@ const veil = new Veil($('#veil'));
 const cardView = new CardView($('#cardview'));
 cardView.onStep = () => sound.play('flip');
 const rush = new Rush($('#rush'));
+const cine = new Cine($('#cine'));
+const story = () => STORY[0];
 const mouse = { x: 0, y: 0, sx: 0, sy: 0 };
 addEventListener('pointermove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
 const extScene = new THREE.Scene();
@@ -104,6 +108,7 @@ function loop(now) {
   veil.frame(now / 1000, dt);
   cardView.frame(now / 1000, dt);
   rush.frame(now / 1000, dt);
+  if (cine.on) return;                                          // la cinématique couvre tout
   if (cardView.isOpen && cardView.reward) return;                // le butin couvre tout l'écran
   if (current === 'game') { if (canvas.style.display !== 'none') play.frame(dt); return; }
   if (current === 'deck') { play.stage.update(dt); play.stage.render(); return; }
@@ -189,6 +194,7 @@ async function enter() {
   sound.startMusic('menu');
   updateSound();
   veil.stir = 3; veil.tween('stir', 0, 2400);
+  if (!save.seen?.intro) { openMenu(); await cine.play(story().intro); (save.seen ||= {}).intro = 1; persist(); return; }
   openMenu();
 }
 
@@ -200,7 +206,13 @@ function openMenu() {
   $('#m-tier').textContent = done() ? 'Rejouer le Roi déchu' : (FOES[n].boss ? 'Le maître des lieux · ' : '') + 'premier à ' + PALIERS[j];
   show('menu');
 }
-$('#m-go').onclick = () => { sound.play('click'); startDuel(done() ? 11 : save.node); };
+$('#m-go').onclick = async () => {
+  if (busy) return;
+  sound.play('click');
+  const n = done() ? 11 : save.node;
+  if (n === 11 && !save.seen?.boss) { busy = true; await cine.play(story().boss); (save.seen ||= {}).boss = 1; persist(); busy = false; }
+  startDuel(n);
+};
 $('#m-deck').onclick = () => { sound.play('click'); go(openDeck); };
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { sound.play('click'); go(openMenu); }));
 
@@ -325,7 +337,13 @@ function victory(n, score) {
   sound.stopMusic(); sound.startMusic('menu');
   show('spoils');
   const after = n === 11 ? ' Le trône est à toi.' : FOES[n].boss ? ` La route s'ouvre : ${ZONES[zoneIdx(n + 1)].name}.` : '';
-  cardView.open(v, { reward: { title: `${FOES[n].name} s'effondre`, sub: (isNew ? `Tu gagnes la carte ${NAMES[v]} (rang ${v}).` : `${NAMES[v]} · rang ${v}.`) + after }, onDone: () => { sound.play('click'); go(openMenu); } });
+  // après la carte : la cinématique du lieu suivant (ou la fin), puis l'accueil
+  const seq = n === 11 ? story().ending : FOES[n].boss ? story().zones[zoneIdx(n + 1)] : null;
+  cardView.open(v, { reward: { title: `${FOES[n].name} s'effondre`, sub: (isNew ? `Tu gagnes la carte ${NAMES[v]} (rang ${v}).` : `${NAMES[v]} · rang ${v}.`) + after }, onDone: async () => {
+    sound.play('click');
+    if (!seq) return go(openMenu);
+    openMenu(); await cine.play(seq);
+  } });
   setTimeout(() => sound.play('flip'), 500);
   setTimeout(() => sound.play('flip7'), 1000);
 }
@@ -357,7 +375,8 @@ if (DEV) {
   const d = document.createElement('div'); d.id = 'dev';
   d.innerHTML = `<button data-d="open">dev</button><div class="dev-list hidden">
     <button data-d="win">Gagner ce duel</button><button data-d="next">Duel suivant</button><button data-d="zone">Lieu suivant</button>
-    <button data-d="end">Boss final</button><button data-d="reset">Recommencer l'histoire</button></div>`;
+    <button data-d="end">Boss final</button><button data-d="reset">Recommencer l'histoire</button>
+    <button data-d="c-intro">▶ Intro</button><button data-d="c-z1">▶ Pont-levis</button><button data-d="c-z2">▶ Château</button><button data-d="c-boss">▶ Boss final</button><button data-d="c-end">▶ Fin</button></div>`;
   document.body.appendChild(d);
   d.addEventListener('click', (e) => {
     const k = e.target.closest('[data-d]')?.dataset.d; if (!k) return;
@@ -368,8 +387,10 @@ if (DEV) {
     if (k === 'next') devJump(save.node + 1);
     if (k === 'zone') devJump((Math.floor(save.node / 4) + 1) * 4);
     if (k === 'end') devJump(11);
+    const S = story(), C = { 'c-intro': S.intro, 'c-z1': S.zones[1], 'c-z2': S.zones[2], 'c-boss': S.boss, 'c-end': S.ending };
+    if (C[k]) cine.play(C[k]);
     if (k === 'reset') { try { localStorage.removeItem(KEY); } catch { /* */ } location.href = location.pathname; }
   });
 }
-window.__vii = { rush, veil, play, cardView, go, inspect, get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause, show };
+window.__vii = { rush, cine, veil, play, cardView, go, inspect, get save() { return save; }, victory, defeat, startDuel, openDeck, openMenu, setPause, show };
 boot();
